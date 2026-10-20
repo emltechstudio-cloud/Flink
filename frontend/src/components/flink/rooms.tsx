@@ -114,7 +114,7 @@ export function ScreenShareIndicator() {
   if (!isScreenSharing) return null;
   
   return (
-    <div className="flex items-center gap-2 rounded-full bg-green-500/20 px-3 py-1 text-sm text-green-200">
+    <div className="flex items-center gap-2 rounded-full bg-primary/20 px-3 py-1 text-sm text-primary-fg">
       <Monitor className="size-4" />
       Screen sharing active
     </div>

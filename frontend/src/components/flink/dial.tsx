@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Delete, MessageCircle, Phone, Video } from "lucide-react";
+import { ArrowLeft, Delete, MessageCircle, Phone, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useFlink } from "@/lib/flink/store";
 import { formatFlinkNumber } from "@/lib/utils";
@@ -8,7 +8,7 @@ import type { CommMode } from "@/lib/flink/types";
 const KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "", "0", "del"] as const;
 
 export function DialPad() {
-  const { startChat, approach, busy } = useFlink();
+  const { startChat, approach, busy, setView } = useFlink();
   const [digits, setDigits] = useState("");
 
   function press(key: (typeof KEYS)[number]) {
@@ -27,12 +27,11 @@ export function DialPad() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <div className="px-6 pt-6 pb-2">
-        <p className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">Start a chat</p>
+      <div className="flex items-center gap-2 px-4 pt-4 pb-2"><Button variant="ghost" size="icon" onClick={() => setView("history")} aria-label="Back to chats"><ArrowLeft className="size-5" /></Button><div><p className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">New chat</p><p className="text-sm text-muted">Enter a six-digit Flink number</p></div></div>
+      <div className="px-6 pt-3 pb-2">
         <p className="font-display mt-3 min-h-[3.2rem] text-center text-[2.6rem] leading-none tracking-[0.14em] text-fg tabular-nums">
           {digits ? formatFlinkNumber(digits) : "······"}
         </p>
-        <p className="mt-2 text-center text-sm text-muted">Enter a six-digit Flink number</p>
       </div>
       <div className="mx-auto grid w-full max-w-[320px] grid-cols-3 gap-3 px-6 py-4">
         {KEYS.map((key, i) =>
@@ -51,15 +50,6 @@ export function DialPad() {
         )}
       </div>
       <div className="mt-auto flex items-center justify-center gap-3 px-6 pt-2 pb-4">
-        <Button
-          size="round"
-          variant="secondary"
-          disabled={digits.length !== 6 || busy}
-          onClick={() => void startChat(digits)}
-          aria-label="Open chat"
-        >
-          <MessageCircle className="size-5" />
-        </Button>
         <Button
           size="round"
           variant="secondary"

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { History, Link2, Radio, UserRound, Users } from "lucide-react";
+import { Link2, MessageCircle, UserRound, Users } from "lucide-react";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import { useFlink } from "@/lib/flink/store";
@@ -14,9 +14,8 @@ import { CallOverlay, IncomingSheet, WaitingBanner } from "./overlays";
 import { formatFlinkNumber } from "@/lib/utils";
 import type { AppView } from "@/lib/flink/types";
 
-const NAV: Array<{ id: AppView; label: string; icon: typeof Radio }> = [
-  { id: "dial", label: "Chat", icon: Radio },
-  { id: "history", label: "History", icon: History },
+const NAV: Array<{ id: AppView; label: string; icon: typeof MessageCircle }> = [
+  { id: "history", label: "Chats", icon: MessageCircle },
   { id: "groups", label: "Groups", icon: Users },
   { id: "rooms", label: "Rooms", icon: Link2 },
   { id: "you", label: "You", icon: UserRound },
@@ -50,8 +49,8 @@ export function FlinkShell() {
             )}
             <WaitingBanner />
             <main className="flex min-h-0 flex-1 flex-col">
-              {view === "home" || view === "dial" ? <DialPad /> : null}
-              {view === "history" && <HistoryView />}
+              {(view === "home" || view === "history") && <HistoryView />}
+              {view === "dial" && <DialPad />}
               {view === "chat" && <ChatView />}
               {view === "groups" && <GroupsView />}
               {view === "rooms" && <RoomsView />}
@@ -61,7 +60,7 @@ export function FlinkShell() {
               <nav className="flex border-t border-border bg-surface px-1 py-2 pb-[max(0.5rem,env(safe-area-inset-bottom))]">
                 {NAV.map((item) => {
                   const Icon = item.icon;
-                  const active = view === item.id || (item.id === "dial" && view === "home");
+                  const active = view === item.id || (item.id === "history" && view === "home");
                   return (
                     <button
                       key={item.id}

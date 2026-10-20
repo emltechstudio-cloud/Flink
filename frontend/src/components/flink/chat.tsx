@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Send, Trash2, Video, X } from "lucide-react";
+import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Send, Trash2, UserPlus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
@@ -12,7 +12,7 @@ const waveform = [4, 8, 13, 9, 16, 11, 19, 12, 7, 15, 10, 18, 8, 14, 6, 11, 17, 
 export function ChatView() {
   const {
     activeThread, messages, contacts, sendText, sendImage, sendVoiceNote, sendVideo, sendGif, sendFile,
-    addReaction, deleteMessage, setView, approach, callStatus, peerStatuses, sessionEnded, startNewSession,
+    addReaction, deleteMessage, setView, approach, callStatus, peerStatuses, sessionEnded, startNewSession, upsertContact,
   } = useFlink();
   const [draft, setDraft] = useState("");
   const [fileMenuOpen, setFileMenuOpen] = useState(false);
@@ -222,11 +222,11 @@ export function ChatView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f8eef2]">
-      <header className="flex items-center gap-1 bg-primary px-1 py-2 text-primary-fg shadow-sm">
+      <header className="relative flex items-center gap-1 bg-primary px-1 py-2 text-primary-fg shadow-sm">
         <Button variant="ghost" size="icon" className="text-primary-fg hover:bg-white/10" onClick={() => setView("history")} aria-label="Back"><ArrowLeft className="size-5" /></Button>
         <NumberAvatar seed={peer} label={name} size={40} />
         <div className="min-w-0 flex-1"><p className="truncate text-[15px] font-semibold">{name}</p><p className="text-xs text-primary-fg/75">{statusLabel}</p></div>
-        {/^[0-9]{6}$/.test(peer) && <><Button variant="ghost" size="icon" className="text-primary-fg hover:bg-white/10" onClick={() => void approach(peer, "voice")} aria-label="Voice call"><Phone className="size-5" /></Button><Button variant="ghost" size="icon" className="text-primary-fg hover:bg-white/10" onClick={() => void approach(peer, "video")} aria-label="Video call"><Video className="size-5" /></Button></>}
+        {/^[0-9]{6}$/.test(peer) && <div className="ml-auto flex items-center gap-1 rounded-full bg-black/10 p-1"><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void upsertContact(peer, name)} aria-label="Save contact"><UserPlus className="size-[18px]" /></Button><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "voice")} aria-label="Audio call"><Phone className="size-[18px]" /></Button><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "video")} aria-label="Video call"><Video className="size-[18px]" /></Button></div>}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(rgba(123,21,53,0.07)_1px,transparent_1px)] [background-size:18px_18px] px-3 py-4">
@@ -246,7 +246,7 @@ export function ChatView() {
         <div ref={bottom} />
       </div>
 
-      {sessionEnded && <div className="border-t border-border bg-surface px-4 py-3 text-center"><p className="text-sm text-muted">Session has ended</p><Button className="mt-2" onClick={() => void startNewSession(peer)}><RefreshCw className="mr-2 size-4" />Start New Session</Button></div>}
+      {sessionEnded && <div className="border-t border-border bg-surface px-4 py-3 text-center"><p className="text-sm text-muted">Chat connection ended</p><Button className="mt-2" onClick={() => void startNewSession(peer)}><RefreshCw className="mr-2 size-4" />Reconnect chat</Button></div>}
 
       {recordingError && <div className="border-t border-danger/20 bg-danger/5 px-3 py-2 text-center text-xs text-danger" role="status">{recordingError}<button type="button" className="ml-2 font-semibold underline" onClick={() => setRecordingError(null)}>Dismiss</button></div>}
       {voicePreview && <div className="border-t border-border bg-surface px-3 py-2"><audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; setVoicePreview((preview) => preview ? { ...preview, duration } : preview); }} onEnded={() => setPreviewPlaying(false)} className="hidden" /><div className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-[#fff8fa] px-3 py-2.5"><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>{previewPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}</Button><div className="flex min-w-0 flex-1 items-center gap-[3px]">{waveform.map((height, index) => <span key={index} className="w-[3px] shrink-0 rounded-full bg-primary/60" style={{ height }} />)}</div><span className="min-w-[38px] text-right text-xs text-muted">{voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : "Ready"}</span><Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-danger hover:bg-danger/10" onClick={clearVoicePreview} aria-label="Delete voice note"><Trash2 className="size-4" /></Button><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={sendPreview} aria-label="Send voice note"><Send className="size-4" /></Button></div></div>}

@@ -167,7 +167,7 @@ export function WaitingBanner() {
     <div className="flex items-center justify-between gap-3 border-b border-border bg-mist px-4 py-2.5 text-sm">
       <div className="flex items-center gap-2">
         <p className="text-muted">
-          {sessionEnded ? "Session ended - " : callStatus || `Waiting for ${formatFlinkNumber(outgoing.to)}`}
+          {sessionEnded ? "Chat connection ended - " : callStatus || `Waiting for ${formatFlinkNumber(outgoing.to)}`}
         </p>
         {participantCount > 0 && (
           <span className="flex items-center gap-1 text-muted">
