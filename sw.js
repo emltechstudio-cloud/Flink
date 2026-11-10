@@ -52,25 +52,34 @@ self.addEventListener("push", (event) => {
   const from = data.from || "Someone";
   const isGroup = data.type === "flink_group_request";
   const mode = data.mode || "ping";
+  const isCall = mode === "voice" || mode === "video";
   event.waitUntil(self.registration.showNotification("Flink", {
     body: isGroup ? `A group wants to ${mode === "ping" ? "talk" : mode}` : `${from} wants ${mode === "ping" ? "to talk" : mode}`,
     icon: new URL("./icon.svg", scopeUrl).toString(),
     badge: new URL("./icon.svg", scopeUrl).toString(),
     data,
     tag: data.session_id || "flink",
+    requireInteraction: true,
+    vibrate: [250, 100, 250, 100, 500],
+    actions: isCall ? [
+      { action: "answer", title: "Answer" },
+      { action: "decline", title: "Decline" },
+    ] : [],
   }));
 });
 
 self.addEventListener("notificationclick", (event) => {
   event.notification.close();
   const payload = event.notification.data || {};
+  const action = event.action || "answer";
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of windows) {
       if ("focus" in client) await client.focus();
-      client.postMessage({ type: "flink-push", payload });
+      client.postMessage({ type: "flink-push-action", action, payload });
       return;
     }
-    await self.clients.openWindow(scopeUrl.toString());
+    const client = await self.clients.openWindow(scopeUrl.toString());
+    client?.postMessage({ type: "flink-push-action", action, payload });
   })());
 });

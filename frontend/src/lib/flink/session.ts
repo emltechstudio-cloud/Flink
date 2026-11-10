@@ -10,6 +10,7 @@ type PeerSlot = {
   makingOffer: boolean;
   ignoreOffer: boolean;
   pending: RTCIceCandidateInit[];
+  transfers: Map<string, { total: number; received: string[]; meta: ChatData; field: "image" | "audio" | "video" | "file" }>;
 };
 
 export type ChatData = {
@@ -51,6 +52,7 @@ export class FlinkSession {
   private localStream: MediaStream | null = null;
   private selfId = "";
   closed = false;
+  private static readonly CHUNK_SIZE = 48_000;
 
   constructor(
     readonly sessionId: string,
@@ -87,7 +89,39 @@ export class FlinkSession {
   sendChat(data: ChatData) {
     const raw = JSON.stringify({ v: 1, ...data });
     for (const slot of this.peers.values()) {
-      if (slot.channel?.readyState === "open") slot.channel.send(raw);
+      if (slot.channel?.readyState !== "open") continue;
+      const field = ["image", "audio", "video", "file"].find((key) => typeof data[key as keyof ChatData] === "string") as "image" | "audio" | "video" | "file" | undefined;
+      if (!field || raw.length <= FlinkSession.CHUNK_SIZE) {
+        slot.channel.send(raw);
+        continue;
+      }
+      const transferId = `${data.id}-${field}`;
+      const value = String(data[field]);
+      const total = Math.ceil(value.length / FlinkSession.CHUNK_SIZE);
+      const meta = { ...data, [field]: undefined } as ChatData;
+      slot.channel.send(JSON.stringify({ v: 1, kind: "chunk_start", transferId, total, field, meta }));
+      for (let index = 0; index < total; index += 1) {
+        const chunk = JSON.stringify({
+          v: 1,
+          kind: "chunk",
+          transferId,
+          index,
+          data: value.slice(index * FlinkSession.CHUNK_SIZE, (index + 1) * FlinkSession.CHUNK_SIZE),
+        });
+        const send = () => {
+          if (slot.channel?.readyState === "open") slot.channel.send(chunk);
+        };
+        if (slot.channel.bufferedAmount > 1_000_000) {
+          const wait = () => {
+            if (slot.channel?.readyState !== "open") return;
+            if (slot.channel.bufferedAmount <= 250_000) send();
+            else setTimeout(wait, 30);
+          };
+          wait();
+        } else {
+          send();
+        }
+      }
     }
   }
 
@@ -193,6 +227,7 @@ export class FlinkSession {
       makingOffer: false,
       ignoreOffer: false,
       pending: [],
+      transfers: new Map(),
     };
     this.peers.set(id, slot);
 
@@ -200,8 +235,10 @@ export class FlinkSession {
       for (const track of this.localStream.getTracks()) pc.addTrack(track, this.localStream);
     }
 
-    const channel = pc.createDataChannel("flink", { ordered: true });
-    this.bindChannel(slot, channel);
+    if (!polite) {
+      const channel = pc.createDataChannel("flink", { ordered: true });
+      this.bindChannel(slot, channel);
+    }
     pc.ondatachannel = (ev) => this.bindChannel(slot, ev.channel);
 
     pc.onicecandidate = (ev) => {
@@ -218,10 +255,21 @@ export class FlinkSession {
       }
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
         this.handlers.onStatus("Connection dropped");
+        if (!polite && !this.closed) {
+          setTimeout(() => {
+            if (this.closed || pc.connectionState === "connected" || pc.connectionState === "closed") return;
+            try {
+              pc.restartIce();
+            } catch {
+              /* browser may reject restart after teardown */
+            }
+          }, 800);
+        }
       }
     };
 
     pc.onnegotiationneeded = async () => {
+      if (polite) return;
       try {
         slot.makingOffer = true;
         await pc.setLocalDescription(await pc.createOffer());
@@ -233,7 +281,7 @@ export class FlinkSession {
       }
     };
 
-    // Kick an offer from the impolite (higher id) side if we already have a stream
+    // Kick an offer from the single impolite side if we already have a stream.
     if (!polite && this.localStream) {
       try {
         slot.makingOffer = true;
@@ -264,7 +312,34 @@ export class FlinkSession {
     };
     channel.onmessage = (ev) => {
       try {
-        const data = JSON.parse(String(ev.data)) as ChatData;
+        const data = JSON.parse(String(ev.data)) as ChatData & {
+          transferId?: string;
+          total?: number;
+          index?: number;
+          data?: string;
+          field?: "image" | "audio" | "video" | "file";
+          meta?: ChatData;
+        };
+        if (data.kind === "chunk_start" && data.transferId && data.total && data.field && data.meta) {
+          slot.transfers.set(data.transferId, {
+            total: data.total,
+            received: new Array(data.total),
+            meta: data.meta,
+            field: data.field,
+          });
+          return;
+        }
+        if (data.kind === "chunk" && data.transferId && typeof data.index === "number" && typeof data.data === "string") {
+          const transfer = slot.transfers.get(data.transferId);
+          if (!transfer || data.index >= transfer.total) return;
+          transfer.received[data.index] = data.data;
+          if (transfer.received.every(Boolean)) {
+            const complete = { ...transfer.meta, [transfer.field]: transfer.received.join("") };
+            slot.transfers.delete(data.transferId);
+            this.handlers.onChat(slot.flinkNumber || slot.id, complete);
+          }
+          return;
+        }
         this.handlers.onChat(slot.flinkNumber || slot.id, data);
       } catch {
         /* ignore */

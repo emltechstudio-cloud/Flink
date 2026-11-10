@@ -12,6 +12,7 @@ export class SignalingSocket {
   private closed = false;
   private retry = 0;
   private timer: ReturnType<typeof setTimeout> | null = null;
+  private queue: string[] = [];
   peerId: string | null = null;
 
   constructor(
@@ -33,6 +34,14 @@ export class SignalingSocket {
     this.ws = ws;
     ws.onopen = () => {
       this.retry = 0;
+      for (const message of this.queue.splice(0)) {
+        try {
+          ws.send(message);
+        } catch {
+          this.queue.unshift(message);
+          break;
+        }
+      }
     };
     ws.onmessage = (ev) => {
       try {
@@ -62,8 +71,12 @@ export class SignalingSocket {
   }
 
   send(type: string, payload?: unknown, target?: string) {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
-    this.ws.send(JSON.stringify({ type, payload, target }));
+    const message = JSON.stringify({ type, payload, target });
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      if (!this.closed) this.queue.push(message);
+      return false;
+    }
+    this.ws.send(message);
     return true;
   }
 
@@ -76,6 +89,7 @@ export class SignalingSocket {
       /* noop */
     }
     this.ws = null;
+    this.queue = [];
   }
 }
 

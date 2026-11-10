@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Download, LogOut, Plus, Smartphone, UserRound } from "lucide-react";
+import { Bell, Download, LogOut, Plus, Smartphone, UserRound, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FlinkMark } from "./mark";
@@ -7,11 +7,13 @@ import { useFlink } from "@/lib/flink/store";
 import { formatFlinkNumber } from "@/lib/utils";
 import { installApp } from "@/pwa";
 import { registerFlinkPush } from "@/lib/flink/push";
+import { isRingtoneEnabled, setRingtoneEnabled } from "@/lib/flink/ringtone";
 
 export function YouView() {
   const { profile, contacts, peerStatuses, downloadSim, logout, upsertContact } = useFlink();
   const [contactName, setContactName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
+  const [ringtoneEnabled, setRingtoneEnabledState] = useState(() => isRingtoneEnabled());
   if (!profile) return null;
   const token = profile.accessToken;
   async function enableNotifications() {
@@ -64,6 +66,18 @@ export function YouView() {
         <Button variant="secondary" className="w-full" onClick={() => void enableNotifications()}>
           <Bell className="size-4" />
           Enable notifications
+        </Button>
+        <Button
+          variant="secondary"
+          className="w-full"
+          onClick={() => {
+            const next = !ringtoneEnabled;
+            setRingtoneEnabled(next);
+            setRingtoneEnabledState(next);
+          }}
+        >
+          {ringtoneEnabled ? <Volume2 className="size-4" /> : <VolumeX className="size-4" />}
+          {ringtoneEnabled ? "Ringtone on" : "Ringtone off"}
         </Button>
         <Button
           variant="secondary"

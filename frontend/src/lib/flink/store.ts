@@ -6,6 +6,7 @@ import { registerFlinkPush } from "./push";
 import { dropMailbox, SignalingSocket } from "./signaling";
 import { FlinkSession } from "./session";
 import { flinkStorage } from "./storage";
+import { startRingtone, stopRingtone } from "./ringtone";
 import type {
   AppView,
   CallLog,
@@ -496,12 +497,14 @@ export const useFlink = create<FlinkState>((set, get) => ({
   async acceptIncoming() {
     const incoming = get().incoming;
     if (!incoming) return;
+    stopRingtone();
     set({ incoming: null });
     await joinSession(incoming.sessionId, incoming.mode, incoming.from);
   },
 
   declineIncoming() {
     const incoming = get().incoming;
+    stopRingtone();
     set({ incoming: null });
     if (incoming) {
       const token = get().profile?.accessToken;
@@ -881,6 +884,7 @@ function startMailbox() {
       };
       if (!payload.session_id || !payload.from) return;
       if (payload.from === profile.flinkNumber) return;
+      startRingtone();
       useFlink.setState({
         incoming: {
           from: payload.from,
@@ -1120,10 +1124,14 @@ function fileToDataUrl(file: File) {
 
 if (typeof window !== "undefined") {
   navigator.serviceWorker?.addEventListener("message", (event) => {
-    const data = event.data as { type?: string; payload?: IncomingRequest & { session_id?: string; from?: string; mode?: CommMode } };
-    if (data?.type !== "flink-push") return;
+    const data = event.data as {
+      type?: string;
+      action?: "answer" | "decline";
+      payload?: IncomingRequest & { session_id?: string; from?: string; mode?: CommMode };
+    };
+    if (data?.type !== "flink-push" && data?.type !== "flink-push-action") return;
     const payload = data.payload;
-    if (!payload) return;
+    if (!payload?.from) return;
     useFlink.setState({
       incoming: {
         from: payload.from,
@@ -1133,5 +1141,7 @@ if (typeof window !== "undefined") {
         groupName: payload.groupName,
       },
     });
+    if (data.action === "decline") useFlink.getState().declineIncoming();
+    else startRingtone();
   });
 }
