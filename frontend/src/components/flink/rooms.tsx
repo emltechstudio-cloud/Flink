@@ -29,10 +29,10 @@ export function RoomsView() {
 
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-      <p className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">Link rooms</p>
-      <h2 className="font-display mt-1 text-2xl font-medium">Share a room, not an identity</h2>
+      <p className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">Rooms</p>
+      <h2 className="font-display mt-1 text-2xl font-medium">Start a room</h2>
       <p className="mt-2 mb-6 text-sm leading-relaxed text-muted">
-        Only you need a Flink number. Guests join from the link, pick a name, and leave when it is over.
+        Make a temporary chat, voice call, or video call. Share the link and guests can join without a Flink number.
       </p>
       <Label htmlFor="rtitle">Room name</Label>
       <Input
@@ -63,9 +63,9 @@ export function RoomsView() {
           </button>
         ))}
       </div>
-      <Button className="w-full" onClick={create}>
-        <Link2 className="size-4" />
-        Create room link
+        <Button className="w-full" onClick={create}>
+          <Link2 className="size-4" />
+          Create and share room
       </Button>
       {link && (
         <div className="mt-4 rounded-[20px] border border-border bg-surface p-4">
@@ -74,14 +74,14 @@ export function RoomsView() {
             <Button className="flex-1" variant="secondary" onClick={() => void copy()}>
               <Copy className="size-4" /> Copy
             </Button>
-            <Button className="flex-1" onClick={() => (window.location.href = link)}>
-              Open as host
+              <Button className="flex-1" onClick={() => (window.location.href = link)}>
+                Open room
             </Button>
           </div>
         </div>
       )}
       <section className="mt-6">
-        <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted uppercase">Saved room links</p>
+        <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted uppercase">Your rooms</p>
         {rooms.length === 0 ? <p className="text-sm text-muted">Created links will stay here for later host re-entry.</p> : rooms.map((room) => <div key={room.id} className="mb-2 rounded-[18px] border border-border bg-surface p-3"><div className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate font-semibold">{room.title}</p><p className="text-xs text-muted">{room.mode} · {new Date(room.lastOpenedAt).toLocaleString()}</p></div><Button size="icon" variant="ghost" aria-label={`Open ${room.title}`} onClick={() => { window.location.href = `${room.url}&host=${room.hostNumber ?? profile?.flinkNumber ?? ""}`; }}><ExternalLink className="size-4" /></Button><Button size="icon" variant="ghost" aria-label={`Copy ${room.title}`} onClick={() => void navigator.clipboard.writeText(`${room.url}&host=${room.hostNumber ?? profile?.flinkNumber ?? ""}`)}><Copy className="size-4" /></Button></div></div>)}
       </section>
     </div>

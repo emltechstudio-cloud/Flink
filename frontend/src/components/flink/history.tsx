@@ -12,8 +12,21 @@ export function HistoryView() {
     <div className="relative min-h-0 flex-1 overflow-y-auto px-3 pb-24">
       <section className="pt-2">
         <div className="flex items-center justify-between px-3 py-2"><div><p className="text-xs font-semibold tracking-[0.14em] text-muted uppercase">Chats</p><p className="mt-1 text-sm text-muted">Your private conversations</p></div><span className="rounded-full bg-mist px-2.5 py-1 text-xs font-semibold text-primary">{threads.length}</span></div>
-        {threads.length === 0 && (
-          <p className="px-3 py-8 text-center text-sm text-muted">Nothing yet. Enter a Flink number to start chatting.</p>
+        {threads.length === 0 && calls.length === 0 && (
+          <div className="mx-3 mt-4 rounded-[22px] border border-primary/10 bg-surface p-4 shadow-soft">
+            <p className="font-semibold">Your internet phone is ready.</p>
+            <p className="mt-1 text-sm leading-relaxed text-muted">
+              Start with a six-digit Flink number. Then choose chat, voice, or video. You can also make a room link for people who do not have Flink.
+            </p>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Button type="button" onClick={() => setView("dial")}>
+                <MessageCircle className="size-4" /> New chat
+              </Button>
+              <Button type="button" variant="secondary" onClick={() => setView("rooms")}>
+                <Radio className="size-4" /> New room
+              </Button>
+            </div>
+          </div>
         )}
         {threads.map((t) => (
           <button
@@ -35,7 +48,7 @@ export function HistoryView() {
       </section>
       <section className="pt-5">
         <p className="px-3 py-2 text-[11px] font-semibold tracking-[0.12em] text-muted uppercase">Recent calls</p>
-        {calls.length === 0 && <p className="px-3 py-6 text-center text-sm text-muted">No pings or calls stored here.</p>}
+        {calls.length === 0 && threads.length > 0 && <p className="px-3 py-6 text-center text-sm text-muted">Calls you place or receive will appear here.</p>}
         {calls.slice(0, 20).map((c) => {
           const Icon = c.mode === "video" ? Video : c.mode === "voice" ? Phone : Radio;
           return (
@@ -59,7 +72,7 @@ export function HistoryView() {
           );
         })}
       </section>
-      <Button type="button" size="round" className="fixed bottom-[76px] right-[max(1rem,calc(50% - 184px))] z-20 size-14 rounded-full shadow-[0_10px_24px_rgba(123,21,53,0.24)]" onClick={() => setView("dial")} aria-label="New chat"><MessageCircle className="size-6" /></Button>
+      <Button type="button" size="sm" className="fixed right-[max(1rem,calc(50% - 184px))] bottom-[76px] z-20 rounded-full px-4 shadow-[0_10px_24px_rgba(123,21,53,0.24)]" onClick={() => setView("dial")}><MessageCircle className="size-4" /> New chat</Button>
     </div>
   );
 }

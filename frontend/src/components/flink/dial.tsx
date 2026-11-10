@@ -49,28 +49,10 @@ export function DialPad() {
           ),
         )}
       </div>
-      <div className="mt-auto flex items-center justify-center gap-3 px-6 pt-2 pb-4">
-        <Button
-          size="round"
-          variant="secondary"
-          disabled={digits.length !== 6 || busy}
-          onClick={() => void startChat(digits)}
-          aria-label="Open chat"
-        >
-          <MessageCircle className="size-5" />
-        </Button>
-        <Button size="round" disabled={digits.length !== 6 || busy} onClick={() => go("voice")} aria-label="Voice">
-          <Phone className="size-5" />
-        </Button>
-        <Button
-          size="round"
-          variant="secondary"
-          disabled={digits.length !== 6 || busy}
-          onClick={() => go("video")}
-          aria-label="Video"
-        >
-          <Video className="size-5" />
-        </Button>
+      <div className="mt-auto flex items-center justify-center gap-4 px-6 pt-2 pb-4">
+        <div className="flex flex-col items-center gap-1.5"><Button size="round" variant="secondary" disabled={digits.length !== 6 || busy} onClick={() => void startChat(digits)} aria-label="Open chat"><MessageCircle className="size-5" /></Button><span className="text-xs font-semibold text-muted">Chat</span></div>
+        <div className="flex flex-col items-center gap-1.5"><Button size="round" disabled={digits.length !== 6 || busy} onClick={() => go("voice")} aria-label="Voice call"><Phone className="size-5" /></Button><span className="text-xs font-semibold text-muted">Voice</span></div>
+        <div className="flex flex-col items-center gap-1.5"><Button size="round" variant="secondary" disabled={digits.length !== 6 || busy} onClick={() => go("video")} aria-label="Video call"><Video className="size-5" /></Button><span className="text-xs font-semibold text-muted">Video</span></div>
       </div>
     </div>
   );

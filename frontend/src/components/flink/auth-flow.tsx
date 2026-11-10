@@ -49,7 +49,7 @@ export function AuthFlow() {
             Flink
           </h1>
           <p className="mt-2 mb-8 text-center text-[15px] leading-relaxed text-muted">
-            Know the number. Start a chat. Talk directly. Leave.
+            Your internet phone. Chat, call, video call, or share a room — no phone number required.
           </p>
           <Button className="w-full" size="lg" onClick={() => setPanel("create")} disabled={busy}>
             Create a Flink number
