@@ -1,4 +1,4 @@
-import { ICE_SERVERS } from "./config";
+import { getIceServers } from "./config";
 import { SignalingSocket } from "./signaling";
 import type { CommMode, SignalEvent } from "./types";
 
@@ -50,6 +50,7 @@ export class FlinkSession {
   private signaling: SignalingSocket;
   private peers = new Map<string, PeerSlot>();
   private localStream: MediaStream | null = null;
+  private iceServers: RTCIceServer[] = [];
   private selfId = "";
   closed = false;
   private static readonly CHUNK_SIZE = 48_000;
@@ -72,6 +73,7 @@ export class FlinkSession {
 
   async start(stream?: MediaStream) {
     this.localStream = stream ?? null;
+    this.iceServers = await getIceServers();
     this.signaling.connect();
   }
 
@@ -219,7 +221,7 @@ export class FlinkSession {
       return existing;
     }
     const polite = this.selfId > id;
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+    const pc = new RTCPeerConnection({ iceServers: this.iceServers });
     const slot: PeerSlot = {
       id,
       flinkNumber,

@@ -30,8 +30,14 @@ On first open, the PWA reads the old `inet_db` IndexedDB database and imports th
 - Device, password, and SIM-file account recovery
 - Six-digit number approach flow for ping, chat, voice, and video
 - Reconnecting WebSocket signaling with buffered outbound signaling
-- WebRTC peer sessions with single-initiator negotiation, ICE restart, and TURN configuration support
+- WebRTC peer sessions with single-initiator negotiation, ICE restart, Google STUN, and a no-account OpenRelay TURN fallback
 - Chunked WebRTC data-channel transfer for large media payloads
 - Temporary shareable rooms with saved links, local room history, multi-participant video, and screen sharing
 - Groups, local conversation history, contacts, reactions, and opt-in push notifications
 - Responsive app shell and GitHub Pages-safe relative routes/assets
+
+## ICE and TURN
+
+Google's public endpoints are STUN servers only. Flink also generates short-lived browser credentials for OpenRelay's documented public static-auth TURN service, so calls have a relay fallback without requiring a paid server or account. This is a shared public relay with no uptime, bandwidth, or abuse-resistance guarantee; it is appropriate for development and light use, not a dependable production SLA.
+
+For a private or higher-volume deployment, set `VITE_TURN_URL`, `VITE_TURN_USERNAME`, and `VITE_TURN_CREDENTIAL`. A configured TURN server takes priority over the public fallback.
