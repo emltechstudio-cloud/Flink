@@ -120,7 +120,12 @@ function threadIdFor(number: string) {
 }
 
 async function deliverChat(threadId: string, payload: Parameters<FlinkSession["sendChat"]>[0]) {
-  const sent = useFlink.getState().session?.sendChat(payload) ?? false;
+  const state = useFlink.getState();
+  const peer = threadId.startsWith("d-") ? threadId.slice(2) : "";
+  if ((!state.session || state.sessionEnded) && /^\d{6}$/.test(peer)) {
+    void state.startNewSession(peer);
+  }
+  const sent = state.session?.sendChat(payload) ?? false;
   if (sent) return true;
   await flinkStorage.putOutbox({
     id: payload.id,
@@ -1234,6 +1239,7 @@ if (typeof window !== "undefined") {
     if (data?.type !== "flink-push" && data?.type !== "flink-push-action") return;
     const payload = data.payload;
     if (!payload?.from) return;
+    if (data.action) stopRingtone();
     useFlink.setState({
       incoming: {
         from: payload.from,
@@ -1244,6 +1250,6 @@ if (typeof window !== "undefined") {
       },
     });
     if (data.action === "decline") useFlink.getState().declineIncoming();
-    else startRingtone();
+    else if (!data.action) startRingtone();
   });
 }
