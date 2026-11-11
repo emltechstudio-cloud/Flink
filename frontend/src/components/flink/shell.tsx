@@ -1,11 +1,12 @@
 import { useEffect } from "react";
-import { Link2, MessageCircle, UserRound, Users } from "lucide-react";
+import { Link2, MessageCircle, Phone, UserRound, Users } from "lucide-react";
 import { Toaster } from "sonner";
 import { cn } from "@/lib/utils";
 import { useFlink } from "@/lib/flink/store";
 import { AuthFlow } from "./auth-flow";
 import { DialPad } from "./dial";
 import { HistoryView } from "./history";
+import { CallsView } from "./calls";
 import { ChatView } from "./chat";
 import { GroupsView } from "./groups";
 import { RoomsView } from "./rooms";
@@ -16,6 +17,7 @@ import type { AppView } from "@/lib/flink/types";
 
 const NAV: Array<{ id: AppView; label: string; icon: typeof MessageCircle }> = [
   { id: "history", label: "Chats", icon: MessageCircle },
+  { id: "calls", label: "Calls", icon: Phone },
   { id: "groups", label: "Groups", icon: Users },
   { id: "rooms", label: "Rooms", icon: Link2 },
   { id: "you", label: "You", icon: UserRound },
@@ -50,6 +52,7 @@ export function FlinkShell() {
             <WaitingBanner />
             <main className="flex min-h-0 flex-1 flex-col">
               {(view === "home" || view === "history") && <HistoryView />}
+              {view === "calls" && <CallsView />}
               {view === "dial" && <DialPad />}
               {view === "chat" && <ChatView />}
               {view === "groups" && <GroupsView />}

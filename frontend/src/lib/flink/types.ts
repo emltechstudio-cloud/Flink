@@ -117,6 +117,7 @@ export type AppView =
   | "home"
   | "dial"
   | "history"
+  | "calls"
   | "chat"
   | "groups"
   | "rooms"
