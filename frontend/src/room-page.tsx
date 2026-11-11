@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, Monitor, MonitorOff, PhoneOff, Video, VideoOff } from "lucide-react";
+import { Mic, MicOff, Monitor, MonitorOff, PhoneOff, Smile, Video, VideoOff } from "lucide-react";
 import { Button } from "./components/ui/button";
 import { Input } from "./components/ui/input";
 import { Label } from "./components/ui/label";
@@ -21,6 +21,7 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
   const [videoOff, setVideoOff] = useState(false);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
   const [remotes, setRemotes] = useState<Array<{ id: string; stream: MediaStream }>>([]);
   const [screenSharing, setScreenSharing] = useState(false);
   const sessionRef = useRef<FlinkSession | null>(null);
@@ -92,18 +93,21 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
   async function toggleScreenShare() {
     const session = sessionRef.current;
     if (!session || mode !== 'video') return;
-    if (screenSharing) {
+    const stopShare = () => {
       screenRef.current?.getTracks().forEach((track) => track.stop());
       screenRef.current = null;
       if (cameraRef.current) session.attachLocal(cameraRef.current);
       session.sendScreenShare(false);
       setScreenSharing(false);
+    };
+    if (screenSharing) {
+      stopShare();
       return;
     }
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
       screenRef.current = stream;
-      stream.getVideoTracks()[0]?.addEventListener('ended', () => void toggleScreenShare());
+      stream.getVideoTracks()[0]?.addEventListener('ended', stopShare, { once: true });
       session.attachLocal(stream);
       session.sendScreenShare(true);
       setScreenSharing(true);
@@ -157,7 +161,9 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
         <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
           {messages.map((message) => <div key={message.id} className={`mb-2 flex ${message.mine ? 'justify-end' : 'justify-start'}`}><div className={`max-w-[78%] rounded-[18px] px-3 py-2 text-sm ${message.mine ? 'bg-primary text-primary-fg' : 'border border-border bg-surface'}`}>{!message.mine && <p className="mb-0.5 text-[10px] opacity-70">{message.from}</p>}{message.kind === 'image' && message.imageUrl && <img src={message.imageUrl} alt="Room photo" className="mb-1 max-h-64 rounded-xl" />}{message.kind === 'video' && message.videoUrl && <video src={message.videoUrl} controls className="mb-1 max-h-64 rounded-xl" />}{message.kind === 'voice' && message.audioUrl && <audio src={message.audioUrl} controls className="mb-1 max-w-full" />}{message.kind === 'file' && message.fileUrl && <a href={message.fileUrl} download={message.fileName || 'file'} className="underline">{message.fileName || 'Download file'}</a>}{renderLinkedText(message.text || message.caption)}</div></div>)}
         </div>
+        {emojiOpen && <div className="grid grid-cols-8 gap-1 border-t border-border bg-surface px-3 py-2">{['😀', '😂', '😍', '🥹', '😎', '😢', '😡', '👍', '👏', '🙏', '🔥', '🎉', '❤️', '✨', '🚀', '✅'].map((emoji) => <button key={emoji} type="button" className="rounded-lg p-1 text-xl hover:bg-mist" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiOpen(false); }}>{emoji}</button>)}</div>}
         <form className="flex gap-2 border-t border-border p-3" onSubmit={(event) => { event.preventDefault(); send(); }}>
+          <Button type="button" variant="ghost" size="icon" aria-label="Add emoji" onClick={() => setEmojiOpen((value) => !value)}><Smile className="size-5" /></Button>
           <Input value={draft} onChange={(event) => setDraft(event.target.value)} placeholder="Temporary message" />
           <Button type="submit" disabled={!draft.trim()}>Send</Button>
         </form>

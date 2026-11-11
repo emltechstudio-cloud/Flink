@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Send, Trash2, UserPlus, Video, X } from "lucide-react";
+import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Send, Smile, Trash2, UserPlus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
@@ -25,6 +25,9 @@ export function ChatView() {
   const [previewPlaying, setPreviewPlaying] = useState(false);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
+  const [emojiComposerOpen, setEmojiComposerOpen] = useState(false);
+  const [contactEditorOpen, setContactEditorOpen] = useState(false);
+  const [contactNameDraft, setContactNameDraft] = useState("");
   const bottom = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<HTMLInputElement>(null);
@@ -217,6 +220,7 @@ export function ChatView() {
 
   const peer = activeThread.peerNumber ?? activeThread.title;
   const name = contacts.find((c) => c.flinkNumber === peer)?.name || formatFlinkNumber(peer);
+  const savedContact = contacts.some((contact) => contact.flinkNumber === peer);
   const status = peerStatuses.get(peer);
   const statusLabel = status?.online ? "Online" : status?.lastSeen ? `Last seen: ${formatTime(status.lastSeen)}` : callStatus || formatFlinkNumber(peer);
 
@@ -226,7 +230,22 @@ export function ChatView() {
         <Button variant="ghost" size="icon" className="text-primary-fg hover:bg-white/10" onClick={() => setView("history")} aria-label="Back"><ArrowLeft className="size-5" /></Button>
         <NumberAvatar seed={peer} label={name} size={40} />
         <div className="min-w-0 flex-1"><p className="truncate text-[15px] font-semibold">{name}</p><p className="text-xs text-primary-fg/75">{statusLabel}</p></div>
-        {/^[0-9]{6}$/.test(peer) && <div className="ml-auto flex items-center gap-1 rounded-full bg-black/10 p-1"><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void upsertContact(peer, name)} aria-label="Save contact"><UserPlus className="size-[18px]" /></Button><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "voice")} aria-label="Audio call"><Phone className="size-[18px]" /></Button><Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "video")} aria-label="Video call"><Video className="size-[18px]" /></Button></div>}
+        {/^[0-9]{6}$/.test(peer) && (
+          <div className="relative ml-auto flex items-center gap-1 rounded-full bg-black/10 p-1">
+            <Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => { setContactNameDraft(savedContact ? name : ""); setContactEditorOpen((open) => !open); }} aria-label={savedContact ? "Edit contact" : "Save contact"}>
+              <UserPlus className="size-[18px]" />
+            </Button>
+            <Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "voice")} aria-label="Audio call"><Phone className="size-[18px]" /></Button>
+            <Button variant="ghost" size="icon" className="size-9 rounded-full text-primary-fg hover:bg-white/15" onClick={() => void approach(peer, "video")} aria-label="Video call"><Video className="size-[18px]" /></Button>
+            {contactEditorOpen && (
+              <div className="absolute right-0 top-12 z-20 w-56 rounded-2xl bg-surface p-3 text-fg shadow-lg">
+                <p className="mb-2 text-xs font-semibold text-muted">Name this contact</p>
+                <input autoFocus value={contactNameDraft} onChange={(event) => setContactNameDraft(event.target.value)} placeholder="e.g. Maya" className="min-h-10 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-primary" onKeyDown={(event) => { if (event.key === "Enter") { event.preventDefault(); void upsertContact(peer, contactNameDraft.trim() || peer); setContactEditorOpen(false); } }} />
+                <Button size="sm" className="mt-2 w-full" onClick={() => { void upsertContact(peer, contactNameDraft.trim() || peer); setContactEditorOpen(false); }}>Save contact</Button>
+              </div>
+            )}
+          </div>
+        )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto bg-[radial-gradient(rgba(123,21,53,0.07)_1px,transparent_1px)] [background-size:18px_18px] px-3 py-4">
@@ -240,7 +259,7 @@ export function ChatView() {
             {m.kind === "file" && m.fileUrl && <a href={m.fileUrl} download={m.fileName || "file"} className="mb-1 flex items-center gap-2 rounded-lg bg-primary/10 p-2 text-sm text-primary"><FileText className="size-5 shrink-0" /><span className="max-w-[180px] truncate">{m.fileName || "File"}</span></a>}
             {(m.kind === "text" || m.caption) && <p className={m.kind === "text" ? "" : "mt-1 whitespace-pre-wrap"}>{renderLinkedText(m.kind === "text" ? m.text : m.caption)}</p>}
             {m.reactions && Object.keys(m.reactions).length > 0 && <div className="mt-2 flex flex-wrap gap-1">{Object.entries(m.reactions).map(([emoji, reaction]) => <span key={emoji} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"><span>{emoji}</span><span className="text-subtle">{reaction.count}</span></span>)}</div>}
-            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.mine ? "text-primary/70" : "text-muted"}`}><span>{formatTime(m.ts)}</span><span>{m.mine && m.status === "sent" && "✓"}{m.mine && m.status === "delivered" && "✓✓"}{m.mine && m.status === "read" && <span className="text-primary-2">✓✓</span>}</span></div>
+            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.mine ? "text-primary/70" : "text-muted"}`}><span>{formatTime(m.ts)}</span><span>{m.mine && m.status === "pending" && "Waiting"}{m.mine && m.status === "sent" && "✓"}{m.mine && m.status === "delivered" && "✓✓"}{m.mine && m.status === "read" && <span className="text-primary-2">✓✓</span>}</span></div>
           </div>
         </div>)}
         <div ref={bottom} />
@@ -258,7 +277,7 @@ export function ChatView() {
         <input ref={videoRef} type="file" accept="video/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "video"); e.target.value = ""; }} />
         <input ref={gifRef} type="file" accept="image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendGif(f); e.target.value = ""; }} />
         <input ref={fileUploadRef} type="file" accept="*/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); e.target.value = ""; }} />
-        <div className="relative flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach photo, video, or file"><Paperclip className="size-5" /></Button><Button type="button" variant="ghost" size="sm" className="h-9 rounded-full px-2 font-bold text-[11px] text-primary hover:bg-primary/10" onClick={() => gifRef.current?.click()} aria-label="Send GIF">GIF</Button>{fileMenuOpen && <div className="absolute bottom-12 left-0 z-10 min-w-[150px] rounded-[16px] border border-border bg-surface p-2 shadow-lg"><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />Photo</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}><Film className="size-4 text-primary" />Video</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />File</button></div>}</div>
+        <div className="relative flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach photo, video, or file"><Paperclip className="size-5" /></Button><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji"><Smile className="size-5" /></Button><Button type="button" variant="ghost" size="sm" className="h-9 rounded-full px-2 font-bold text-[11px] text-primary hover:bg-primary/10" onClick={() => gifRef.current?.click()} aria-label="Send GIF">GIF</Button>{fileMenuOpen && <div className="absolute bottom-12 left-0 z-10 min-w-[150px] rounded-[16px] border border-border bg-surface p-2 shadow-lg"><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />Photo</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}><Film className="size-4 text-primary" />Video</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />File</button></div>}{emojiComposerOpen && <div className="absolute bottom-12 left-10 z-10 grid w-64 grid-cols-8 gap-1 rounded-2xl border border-border bg-surface p-3 shadow-lg">{["😀", "😂", "😍", "🥹", "😎", "😢", "😡", "👍", "👎", "👏", "🙏", "🔥", "🎉", "❤️", "✨", "🚀", "💬", "🤝", "✅", "❌", "🙌", "💯", "🤣", "😘"].map((emoji) => <button key={emoji} type="button" className="rounded-lg p-1 text-xl hover:bg-mist" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>{emoji}</button>)}</div>}</div>
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder={recordingVoice ? `Recording… ${recordingSeconds}s` : "Type a message"} className="max-h-28 min-h-10 flex-1 resize-none rounded-[22px] border border-border bg-white px-4 py-2.5 text-[15px] text-fg outline-none placeholder:text-muted focus:border-primary" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (draft.trim()) { void sendText(draft); setDraft(""); } } }} />
         {!draft.trim() && <Button type="button" variant="ghost" size="icon" className={`size-10 rounded-full ${recordingVoice ? "bg-danger text-white hover:bg-danger/90" : "text-primary hover:bg-primary/10"}`} onClick={() => void toggleVoiceRecording()} aria-label={recordingVoice ? "Stop recording" : "Record voice note"}>{recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}</Button>}
         {draft.trim() && <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Send message"><Send className="size-4" /></Button>}

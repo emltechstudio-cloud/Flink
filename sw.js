@@ -65,6 +65,8 @@ self.addEventListener("push", (event) => {
       { action: "answer", title: "Answer" },
       { action: "decline", title: "Decline" },
     ] : [],
+  }).then(() => self.clients.matchAll({ type: "window", includeUncontrolled: true })).then((clients) => {
+    clients.forEach((client) => client.postMessage({ type: "flink-push", payload: data }));
   }));
 });
 

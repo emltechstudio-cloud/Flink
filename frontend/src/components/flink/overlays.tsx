@@ -103,14 +103,14 @@ export function CallOverlay() {
             <NumberAvatar seed={outgoing.to} label={outgoing.to} size={120} />
             <p className="font-display mt-5 text-3xl">{peerName}</p>
             <p className="text-sm text-subtle">{formatFlinkNumber(outgoing.to)}</p>
-            <p className="mt-2 text-sm text-subtle">{callStatus || "Connecting"}</p>
+            <p className="mt-3 rounded-full bg-call-fg/10 px-4 py-2 text-sm text-call-fg/80">{callStatus || "Waiting for them to answer"}</p>
           </div>
         )}
         {video && (
           <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-call/70 to-transparent p-5 pt-10 text-center">
             <p className="font-display text-xl">{peerName}</p>
             <p className="text-xs text-subtle">{formatFlinkNumber(outgoing.to)}</p>
-            <p className="text-sm text-subtle">{callStatus}</p>
+            <p className="text-sm text-subtle">{callStatus || "Waiting for them to answer"}</p>
           </div>
         )}
         {isScreenSharing && (
@@ -150,7 +150,7 @@ export function CallOverlay() {
         >
           {isScreenSharing ? <MonitorOff className="size-5" /> : <Monitor className="size-5" />}
         </Button>
-        <Button size="round" variant="danger" onClick={session && remoteMedia.length ? hangup : cancelOutgoing} aria-label="End">
+        <Button size="round" variant="danger" onClick={() => { if (session && remoteMedia.length) hangup(); else cancelOutgoing(); }} aria-label="End">
           <PhoneOff className="size-5" />
         </Button>
       </div>

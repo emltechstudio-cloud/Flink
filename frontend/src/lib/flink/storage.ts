@@ -218,7 +218,7 @@ export const flinkStorage = {
     await tx("messages", "readwrite", (s) => s.delete(id));
   },
 
-  async updateMessageStatus(id: string, status: "sent" | "delivered" | "read") {
+  async updateMessageStatus(id: string, status: "pending" | "sent" | "delivered" | "read") {
     const db = await openDb();
     await new Promise<void>((resolve, reject) => {
       const t = db.transaction("messages", "readwrite");

@@ -49,7 +49,7 @@ export type ChatMessage = {
   fileName?: string;
   ts: number;
   mine: boolean;
-  status?: "sent" | "delivered" | "read";
+  status?: "pending" | "sent" | "delivered" | "read";
   duration?: number;
   reactions?: Record<string, Reaction>;
 };

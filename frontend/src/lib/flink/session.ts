@@ -27,7 +27,7 @@ export type ChatData = {
   messageId?: string;
   duration?: number;
   emoji?: string;
-  status?: "sent" | "delivered" | "read";
+  status?: "pending" | "sent" | "delivered" | "read";
   sessionActive?: boolean;
   inCall?: boolean;
   displayName?: string;
@@ -88,10 +88,12 @@ export class FlinkSession {
     }
   }
 
-  sendChat(data: ChatData) {
+  sendChat(data: ChatData): boolean {
     const raw = JSON.stringify({ v: 1, ...data });
+    let delivered = false;
     for (const slot of this.peers.values()) {
       if (slot.channel?.readyState !== "open") continue;
+      delivered = true;
       const field = ["image", "audio", "video", "file"].find((key) => typeof data[key as keyof ChatData] === "string") as "image" | "audio" | "video" | "file" | undefined;
       if (!field || raw.length <= FlinkSession.CHUNK_SIZE) {
         slot.channel.send(raw);
@@ -125,6 +127,7 @@ export class FlinkSession {
         }
       }
     }
+    return delivered;
   }
 
   mute(muted: boolean) {
