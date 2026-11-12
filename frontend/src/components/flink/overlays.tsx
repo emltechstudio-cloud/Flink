@@ -111,7 +111,7 @@ export function CallOverlay() {
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center">
-            <audio ref={remoteAudioRef} autoPlay playsInline />
+            {remoteMedia.length > 1 ? remoteMedia.map((remote) => <RemoteAudio key={remote.id} stream={remote.stream} />) : <audio ref={remoteAudioRef} autoPlay playsInline />}
             <NumberAvatar seed={outgoing.to} label={outgoing.to} size={120} />
             <p className="font-display mt-5 text-3xl">{peerName}</p>
             <p className="text-sm text-subtle">{formatFlinkNumber(outgoing.to)}</p>
@@ -174,6 +174,12 @@ function RemoteTile({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
   return <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />;
+}
+
+function RemoteAudio({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
+  return <audio ref={ref} autoPlay playsInline />;
 }
 
 export function WaitingBanner() {
