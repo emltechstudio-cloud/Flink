@@ -55,6 +55,8 @@ export function YouView() {
       <section className="mt-8 rounded-[22px] border border-border bg-surface p-4">
         <div className="mb-4 flex items-center gap-3"><div className="flex size-16 items-center justify-center overflow-hidden rounded-[20px] bg-primary/10 text-primary">{profile.avatarDataUrl ? <img src={profile.avatarDataUrl} alt="Your avatar" className="size-full object-cover" /> : <UserRound className="size-7" />}</div><div className="min-w-0 flex-1"><p className="font-semibold">Your avatar</p><p className="text-xs text-muted">Compressed locally for privacy. No original photo is uploaded.</p></div><label className="inline-flex cursor-pointer items-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-fg"><ImagePlus className="size-4" />Choose<input type="file" accept="image/*" className="hidden" onChange={(event) => { void chooseAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label></div>
         {profile.avatarDataUrl && <Button type="button" variant="ghost" size="sm" className="mb-3 text-danger" onClick={() => void updateAvatar(undefined)}>Remove avatar</Button>}
+        <p className="mb-2 text-xs font-semibold text-muted">Or choose a Flink avatar</p>
+        <div className="mb-4 grid grid-cols-6 gap-2">{presetAvatars.map((avatar) => <button key={avatar} type="button" className="flex aspect-square items-center justify-center overflow-hidden rounded-2xl border-2 border-transparent bg-mist hover:border-primary" onClick={() => void updateAvatar(avatar)} aria-label="Choose preset avatar"><img src={avatar} alt="" className="size-full object-cover" /></button>)}</div>
         <div className="mb-3 flex items-center gap-2"><UserRound className="size-4 text-primary" /><h2 className="font-semibold">Contacts</h2></div>
         <div className="space-y-2">
           <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Name" className="min-h-10 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-primary" />
@@ -126,3 +128,5 @@ function compressAvatar(file: File) {
     image.src = url;
   });
 }
+
+const presetAvatars = ["#7b1535", "#175c8c", "#1b8064", "#6040a0", "#c44f58", "#b77b18"].map((color) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="${color}"/><circle cx="64" cy="52" r="24" fill="white" opacity=".9"/><path d="M25 116c5-25 20-38 39-38s34 13 39 38" fill="white" opacity=".9"/><circle cx="55" cy="50" r="3" fill="#180910"/><circle cx="73" cy="50" r="3" fill="#180910"/><path d="M54 63c7 6 13 6 20 0" fill="none" stroke="#180910" stroke-width="3" stroke-linecap="round"/></svg>`)}`);

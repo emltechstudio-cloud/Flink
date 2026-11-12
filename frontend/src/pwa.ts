@@ -13,6 +13,10 @@ export function registerServiceWorker() {
   window.addEventListener("beforeinstallprompt", (event) => {
     event.preventDefault();
     installPrompt = event as BeforeInstallPromptEvent;
+    const userAgent = navigator.userAgent;
+    if (/Android/i.test(userAgent) && !/iPhone|iPad|Windows|Macintosh/i.test(userAgent)) {
+      window.setTimeout(() => { void installApp(); }, 350);
+    }
   });
   window.addEventListener("appinstalled", () => {
     installPrompt = null;
@@ -25,7 +29,6 @@ export function registerServiceWorker() {
 
 export async function installApp() {
   if (!installPrompt) {
-    window.alert("To install Flink, use your browser’s Share or menu button, then choose Add to Home Screen or Install app.");
     return;
   }
   await installPrompt.prompt();
