@@ -5,6 +5,7 @@ import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
 import { formatFlinkNumber, formatTime } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/flink/types";
+import { flinkStorage } from "@/lib/flink/storage";
 
 type VoicePreview = { file: File; url: string; duration: number };
 type MediaPreview = { file: File; url: string; kind: "image" | "video" };
@@ -27,6 +28,8 @@ export function ChatView() {
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [emojiComposerOpen, setEmojiComposerOpen] = useState(false);
+  const [stickerTrayOpen, setStickerTrayOpen] = useState(false);
+  const [stickers, setStickers] = useState<string[]>([]);
   const [contactEditorOpen, setContactEditorOpen] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState("");
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -50,6 +53,9 @@ export function ChatView() {
       element.scrollIntoView({ behavior: "smooth" });
     }
   }, [messages.length, voicePreview]);
+  useEffect(() => {
+    void flinkStorage.getSetting<string[]>("stickers", []).then(setStickers);
+  }, []);
   useEffect(() => {
     if (!recordingVoice) return;
     const timer = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
@@ -219,6 +225,29 @@ export function ChatView() {
     setReplyingTo(null);
   }
 
+  async function importSticker(file?: File) {
+    if (!file || !/^image\/(webp|gif|png)$/.test(file.type)) {
+      setRecordingError("Choose a WebP, GIF, or PNG sticker.");
+      return;
+    }
+    if (file.size > 20_000_000) {
+      setRecordingError("Keep stickers under 20 MB.");
+      return;
+    }
+    const dataUrl = await fileToDataUrl(file);
+    const next = [dataUrl, ...stickers.filter((item) => item !== dataUrl)].slice(0, 48);
+    setStickers(next);
+    await flinkStorage.setSetting("stickers", next);
+    setStickerTrayOpen(true);
+  }
+
+  async function sendSavedSticker(dataUrl: string) {
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+    await sendGif(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type }), replyingTo ?? undefined);
+    setReplyingTo(null);
+  }
+
   if (!activeThread) return <div className="flex flex-1 items-center justify-center text-sm text-muted">Select a conversation</div>;
 
   const peer = activeThread.peerNumber ?? activeThread.title;
@@ -276,14 +305,15 @@ export function ChatView() {
       {voicePreview && <div className="border-t border-border bg-surface px-3 py-2"><audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; setVoicePreview((preview) => preview ? { ...preview, duration } : preview); }} onEnded={() => setPreviewPlaying(false)} className="hidden" /><div className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-[#fff8fa] px-3 py-2.5"><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>{previewPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}</Button><div className="flex min-w-0 flex-1 items-center gap-[3px]">{waveform.map((height, index) => <span key={index} className="w-[3px] shrink-0 rounded-full bg-primary/60" style={{ height }} />)}</div><span className="min-w-[38px] text-right text-xs text-muted">{voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : "Ready"}</span><Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-danger hover:bg-danger/10" onClick={clearVoicePreview} aria-label="Delete voice note"><Trash2 className="size-4" /></Button><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={sendPreview} aria-label="Send voice note"><Send className="size-4" /></Button></div></div>}
 
       {mediaPreview && <div className="border-t border-border bg-surface px-3 py-3"><div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#fff8fa] p-2"><Button type="button" variant="ghost" size="icon" className="absolute right-2 top-2 z-10 size-8 rounded-full bg-black/55 text-white hover:bg-black/70" onClick={clearMediaPreview} aria-label="Cancel media preview"><X className="size-4" /></Button>{mediaPreview.kind === "image" ? <img src={mediaPreview.url} alt="Photo preview" className="max-h-64 w-full rounded-xl object-cover" /> : <video src={mediaPreview.url} controls className="max-h-64 w-full rounded-xl bg-black" />}<div className="mt-2 flex items-center gap-2"><input value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Add a caption" className="min-h-10 flex-1 rounded-full border border-border bg-white px-4 text-sm text-fg outline-none focus:border-primary" aria-label="Media caption" /><Button type="button" size="icon" className="size-10 shrink-0 rounded-full" onClick={sendMediaPreview} aria-label="Send media"><Send className="size-4" /></Button></div></div></div>}
+      {stickerTrayOpen && <div className="border-t border-border bg-surface px-3 py-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-muted">Your stickers</p><Button type="button" size="sm" variant="secondary" onClick={() => gifRef.current?.click()}>Import WebP/GIF/PNG</Button></div>{stickers.length === 0 ? <p className="rounded-xl bg-mist px-3 py-4 text-center text-xs text-muted">Import WhatsApp stickers here once. They stay in this tray on this device.</p> : <div className="grid max-h-44 grid-cols-6 gap-2 overflow-y-auto">{stickers.map((sticker, index) => <button key={`${sticker.slice(0, 20)}-${index}`} type="button" className="aspect-square rounded-xl border border-border bg-mist p-1 hover:border-primary" onClick={() => void sendSavedSticker(sticker)}><img src={sticker} alt="Saved sticker" className="size-full object-contain" /></button>)}</div>}</div>}
       {replyingTo && <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-2 text-xs"><Reply className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Replying to {replyingTo.from}: {replyingTo.text || replyingTo.caption || replyingTo.fileName || replyingTo.kind}</span><Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><X className="size-4" /></Button></div>}
       <form className="flex items-end gap-2 border-t border-border bg-[#fff8fa] px-2 py-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } }}>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "image"); e.target.value = ""; }} />
         <input ref={voiceRef} type="file" accept="audio/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareVoice(f); e.target.value = ""; }} />
         <input ref={videoRef} type="file" accept="video/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "video"); e.target.value = ""; }} />
-        <input ref={gifRef} type="file" accept="image/gif,image/webp,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendGif(f, replyingTo ?? undefined); e.target.value = ""; }} />
+        <input ref={gifRef} type="file" accept="image/gif,image/webp,image/png" className="hidden" onChange={(e) => { void importSticker(e.target.files?.[0]); e.target.value = ""; }} />
         <input ref={fileUploadRef} type="file" accept="*/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); e.target.value = ""; }} />
-        <div className="relative flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach photo, video, or file"><Paperclip className="size-5" /></Button><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji"><Smile className="size-5" /></Button><Button type="button" variant="ghost" size="sm" className="h-9 rounded-full px-2 font-bold text-[11px] text-primary hover:bg-primary/10" onClick={() => gifRef.current?.click()} aria-label="Send GIF, WebP, or PNG sticker">Sticker</Button>{fileMenuOpen && <div className="absolute bottom-12 left-0 z-10 min-w-[150px] rounded-[16px] border border-border bg-surface p-2 shadow-lg"><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />Photo</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}><Film className="size-4 text-primary" />Video</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />File</button></div>}{emojiComposerOpen && <div className="absolute bottom-12 left-10 z-10 grid w-64 grid-cols-8 gap-1 rounded-2xl border border-border bg-surface p-3 shadow-lg">{["😀", "😂", "😍", "🥹", "😎", "😢", "😡", "👍", "👎", "👏", "🙏", "🔥", "🎉", "❤️", "✨", "🚀", "💬", "🤝", "✅", "❌", "🙌", "💯", "🤣", "😘"].map((emoji) => <button key={emoji} type="button" className="rounded-lg p-1 text-xl hover:bg-mist" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>{emoji}</button>)}</div>}</div>
+        <div className="relative flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach photo, video, or file"><Paperclip className="size-5" /></Button><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji"><Smile className="size-5" /></Button><Button type="button" variant="ghost" size="sm" className="h-9 rounded-full px-2 font-bold text-[11px] text-primary hover:bg-primary/10" onClick={() => setStickerTrayOpen((open) => !open)} aria-label="Open sticker tray">Sticker</Button>{fileMenuOpen && <div className="absolute bottom-12 left-0 z-10 min-w-[150px] rounded-[16px] border border-border bg-surface p-2 shadow-lg"><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />Photo</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}><Film className="size-4 text-primary" />Video</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />File</button></div>}{emojiComposerOpen && <div className="absolute bottom-12 left-10 z-10 grid w-64 grid-cols-8 gap-1 rounded-2xl border border-border bg-surface p-3 shadow-lg">{["😀", "😂", "😍", "🥹", "😎", "😢", "😡", "👍", "👎", "👏", "🙏", "🔥", "🎉", "❤️", "✨", "🚀", "💬", "🤝", "✅", "❌", "🙌", "💯", "🤣", "😘"].map((emoji) => <button key={emoji} type="button" className="rounded-lg p-1 text-xl hover:bg-mist" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>{emoji}</button>)}</div>}</div>
         <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder={recordingVoice ? `Recording… ${recordingSeconds}s` : "Type a message"} className="max-h-28 min-h-10 flex-1 resize-none rounded-[22px] border border-border bg-white px-4 py-2.5 text-[15px] text-fg outline-none placeholder:text-muted focus:border-primary" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } } }} />
         {!draft.trim() && <Button type="button" variant="ghost" size="icon" className={`size-10 rounded-full ${recordingVoice ? "bg-danger text-white hover:bg-danger/90" : "text-primary hover:bg-primary/10"}`} onClick={() => void toggleVoiceRecording()} aria-label={recordingVoice ? "Stop recording" : "Record voice note"}>{recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}</Button>}
         {draft.trim() && <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Send message"><Send className="size-4" /></Button>}
@@ -307,3 +337,12 @@ function renderLinkedText(value?: string) {
 }
 
 function LinkIcon() { return <span className="text-xs">↗</span>; }
+
+function fileToDataUrl(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(reader.error);
+    reader.readAsDataURL(file);
+  });
+}
