@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Mic, MicOff, PhoneOff, Video, VideoOff, Monitor, MonitorOff, Users } from "lucide-react";
+import { AudioLines, ChevronDown, Maximize2, Mic, MicOff, PhoneOff, Video, VideoOff, Monitor, MonitorOff, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
@@ -47,11 +47,14 @@ export function CallOverlay() {
   const { outgoing, session, callStatus, callConnectedAt, remoteMedia, hangup, cancelOutgoing, muted, videoOff, toggleMute, toggleVideo, toggleScreenShare, isScreenSharing, screenStream, roomParticipants, contacts } =
     useFlink();
   const [elapsed, setElapsed] = useState(0);
+  const [minimized, setMinimized] = useState(false);
+  const [audioOutputs, setAudioOutputs] = useState<Array<{ deviceId: string; label: string }>>([]);
+  const [audioOutputId, setAudioOutputId] = useState("default");
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
-  const remoteAudioRef = useRef<HTMLAudioElement>(null);
   const screenRef = useRef<HTMLVideoElement>(null);
   const inCall = Boolean(session && outgoing && (outgoing.mode === "voice" || outgoing.mode === "video"));
+  const audioRouteSupported = typeof HTMLMediaElement !== "undefined" && "setSinkId" in HTMLMediaElement.prototype;
 
   useEffect(() => {
     if (localRef.current && session?.local) localRef.current.srcObject = session.local;
@@ -60,8 +63,41 @@ export function CallOverlay() {
   useEffect(() => {
     const first = remoteMedia[0];
     if (remoteRef.current && first) remoteRef.current.srcObject = first.stream;
-    if (remoteAudioRef.current && first) remoteAudioRef.current.srcObject = first.stream;
   }, [remoteMedia]);
+
+  useEffect(() => {
+    setMinimized(false);
+  }, [outgoing?.sessionId]);
+
+  useEffect(() => {
+    if (!inCall || !audioRouteSupported || !navigator.mediaDevices?.enumerateDevices) return;
+    let active = true;
+    const updateDevices = async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (!active) return;
+        setAudioOutputs(devices.filter((device) => device.kind === "audiooutput").map((device, index) => ({
+          deviceId: device.deviceId,
+          label: device.label || `Audio output ${index + 1}`,
+        })));
+      } catch {
+        if (active) setAudioOutputs([]);
+      }
+    };
+    void updateDevices();
+    navigator.mediaDevices.addEventListener?.("devicechange", updateDevices);
+    return () => {
+      active = false;
+      navigator.mediaDevices.removeEventListener?.("devicechange", updateDevices);
+    };
+  }, [inCall, audioRouteSupported]);
+
+  useEffect(() => {
+    if (!audioRouteSupported) return;
+    document.querySelectorAll<HTMLMediaElement & { setSinkId?: (sinkId: string) => Promise<void> }>("[data-call-audio-output]").forEach((element) => {
+      if (typeof element.setSinkId === "function") void element.setSinkId(audioOutputId).catch(() => {});
+    });
+  }, [audioOutputId, remoteMedia, audioRouteSupported]);
 
   useEffect(() => {
     if (screenRef.current && screenStream) screenRef.current.srcObject = screenStream;
@@ -82,9 +118,46 @@ export function CallOverlay() {
   const video = outgoing.mode === "video";
   const participantCount = Math.max(1, roomParticipants.size + 1);
   const peerName = contacts.find((contact) => contact.flinkNumber === outgoing.to)?.name || formatFlinkNumber(outgoing.to);
+  const endCall = () => {
+    if (session && remoteMedia.length) hangup();
+    else cancelOutgoing();
+  };
 
   return (
+    <>
+      <div className="hidden" aria-hidden="true">
+        {remoteMedia.map((remote) => (
+          <audio key={remote.id} autoPlay playsInline data-call-audio-output ref={(element) => { if (element) element.srcObject = remote.stream; }} />
+        ))}
+      </div>
+      {minimized ? (
+        <div className="fixed inset-x-3 bottom-[calc(env(safe-area-inset-bottom)+5.5rem)] z-40 mx-auto flex max-w-md items-center gap-3 rounded-[20px] border border-border bg-surface p-3 text-fg shadow-[0_12px_36px_rgba(29,18,22,0.24)]" role="status" aria-label={`Call with ${peerName} is active`}>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-3 text-left" onClick={() => setMinimized(false)} aria-label="Return to call">
+            <NumberAvatar seed={outgoing.to} label={peerName} size={40} />
+            <span className="min-w-0">
+              <span className="block truncate text-sm font-semibold">{peerName}</span>
+              <span className="block text-xs text-muted">{callStatus || "Call active"}{callConnectedAt ? ` · ${formatDuration(elapsed)}` : ""}</span>
+            </span>
+          </button>
+          <Button size="icon" variant="ghost" onClick={() => setMinimized(false)} aria-label="Expand call"><Maximize2 className="size-4" /></Button>
+          <Button size="icon" variant="danger" onClick={endCall} aria-label="End call"><PhoneOff className="size-4" /></Button>
+        </div>
+      ) : (
     <div className="fixed inset-0 z-40 flex flex-col bg-call text-call-fg">
+      <div className="absolute top-4 right-4 z-20 flex items-center gap-2">
+        {audioRouteSupported && audioOutputs.length > 0 && (
+          <label className="flex h-10 max-w-[min(52vw,220px)] items-center gap-2 rounded-full bg-call/80 px-3 text-sm" title="Choose audio output device">
+            <AudioLines className="size-4 shrink-0" />
+            <select value={audioOutputId} onChange={(event) => setAudioOutputId(event.target.value)} className="min-w-0 bg-transparent text-call-fg outline-none" aria-label="Audio output device">
+              <option value="default" className="text-fg">Default audio</option>
+              {audioOutputs.filter((device) => device.deviceId && device.deviceId !== "default").map((device) => (
+                <option key={device.deviceId} value={device.deviceId} className="text-fg">{device.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+        <Button size="icon" variant="secondary" className="border-0 bg-call-fg/10 text-call-fg" onClick={() => setMinimized(true)} aria-label="Minimize call"><ChevronDown className="size-5" /></Button>
+      </div>
       <div className="pointer-events-none absolute top-4 left-4 z-10 flex items-center gap-2 rounded-full bg-call/80 px-3 py-1.5 text-sm">
         <Users className="size-4" />
         {participantCount} participant{participantCount > 1 ? "s" : ""}
@@ -111,7 +184,6 @@ export function CallOverlay() {
           </>
         ) : (
           <div className="flex h-full flex-col items-center justify-center">
-            {remoteMedia.length > 1 ? remoteMedia.map((remote) => <RemoteAudio key={remote.id} stream={remote.stream} />) : <audio ref={remoteAudioRef} autoPlay playsInline />}
             <NumberAvatar seed={outgoing.to} label={outgoing.to} size={120} />
             <p className="font-display mt-5 text-3xl">{peerName}</p>
             <p className="text-sm text-subtle">{formatFlinkNumber(outgoing.to)}</p>
@@ -162,24 +234,20 @@ export function CallOverlay() {
         >
           {isScreenSharing ? <MonitorOff className="size-5" /> : <Monitor className="size-5" />}
         </Button>
-        <Button size="round" variant="danger" onClick={() => { if (session && remoteMedia.length) hangup(); else cancelOutgoing(); }} aria-label="End">
+        <Button size="round" variant="danger" onClick={endCall} aria-label="End">
           <PhoneOff className="size-5" />
         </Button>
       </div>
     </div>
+      )}
+    </>
   );
 }
 
 function RemoteTile({ stream }: { stream: MediaStream }) {
   const ref = useRef<HTMLVideoElement>(null);
   useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
-  return <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />;
-}
-
-function RemoteAudio({ stream }: { stream: MediaStream }) {
-  const ref = useRef<HTMLAudioElement>(null);
-  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
-  return <audio ref={ref} autoPlay playsInline />;
+  return <video ref={ref} autoPlay muted playsInline className="h-full w-full object-cover" />;
 }
 
 export function WaitingBanner() {
