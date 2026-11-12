@@ -10,6 +10,7 @@ import { flinkStorage } from "@/lib/flink/storage";
 type VoicePreview = { file: File; url: string; duration: number };
 type MediaPreview = { file: File; url: string; kind: "image" | "video" };
 const waveform = [4, 8, 13, 9, 16, 11, 19, 12, 7, 15, 10, 18, 8, 14, 6, 11, 17, 9, 13, 5, 10, 15, 8, 12];
+const flinkStarterStickers = ["✦", "♥", "★", "☺", "☀", "⚡", "✓", "→"].map((mark, index) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="${["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]}"/><text x="64" y="82" text-anchor="middle" font-size="68" fill="white">${mark}</text></svg>`)}`);
 
 export function ChatView() {
   const {
@@ -30,6 +31,8 @@ export function ChatView() {
   const [emojiComposerOpen, setEmojiComposerOpen] = useState(false);
   const [stickerTrayOpen, setStickerTrayOpen] = useState(false);
   const [stickers, setStickers] = useState<string[]>([]);
+  const [favoriteStickers, setFavoriteStickers] = useState<string[]>([]);
+  const [stickerTab, setStickerTab] = useState<"flink" | "saved" | "favorites">("flink");
   const [contactEditorOpen, setContactEditorOpen] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState("");
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
@@ -54,7 +57,10 @@ export function ChatView() {
     }
   }, [messages.length, voicePreview]);
   useEffect(() => {
-    void flinkStorage.getSetting<string[]>("stickers", []).then(setStickers);
+    void Promise.all([
+      flinkStorage.getSetting<string[]>("stickers", []).then(setStickers),
+      flinkStorage.getSetting<string[]>("favorite_stickers", []).then(setFavoriteStickers),
+    ]);
   }, []);
   useEffect(() => {
     if (!recordingVoice) return;
@@ -248,6 +254,12 @@ export function ChatView() {
     setReplyingTo(null);
   }
 
+  async function favoriteSticker(dataUrl: string) {
+    const next = [dataUrl, ...favoriteStickers.filter((item) => item !== dataUrl)].slice(0, 96);
+    setFavoriteStickers(next);
+    await flinkStorage.setSetting("favorite_stickers", next);
+  }
+
   if (!activeThread) return <div className="flex flex-1 items-center justify-center text-sm text-muted">Select a conversation</div>;
 
   const peer = activeThread.peerNumber ?? activeThread.title;
@@ -289,7 +301,7 @@ export function ChatView() {
             {m.kind === "image" && m.imageUrl && <img src={m.imageUrl} alt="Photo message" className="mb-1 max-h-64 w-full rounded-[7px] object-cover" />}
             {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls className="mb-1 min-w-0 w-full accent-primary" />}
             {m.kind === "video" && m.videoUrl && <video src={m.videoUrl} controls className="mb-1 max-h-64 w-full rounded-[7px]" />}
-            {m.kind === "gif" && m.imageUrl && <img src={m.imageUrl} alt="GIF" className="mb-1 max-h-64 rounded-[7px]" />}
+            {m.kind === "gif" && m.imageUrl && <><img src={m.imageUrl} alt="Sticker" className="mb-1 max-h-64 rounded-[7px]" /><button type="button" className="mb-1 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>★ Save sticker</button></>}
             {m.kind === "file" && m.fileUrl && <a href={m.fileUrl} download={m.fileName || "file"} className="mb-1 flex items-center gap-2 rounded-lg bg-primary/10 p-2 text-sm text-primary"><FileText className="size-5 shrink-0" /><span className="max-w-[180px] truncate">{m.fileName || "File"}</span></a>}
             {(m.kind === "text" || m.caption) && <p className={m.kind === "text" ? "" : "mt-1 whitespace-pre-wrap"}>{renderLinkedText(m.kind === "text" ? m.text : m.caption)}</p>}
             {m.reactions && Object.keys(m.reactions).length > 0 && <div className="mt-2 flex flex-wrap gap-1">{Object.entries(m.reactions).map(([emoji, reaction]) => <span key={emoji} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"><span>{emoji}</span><span className="text-subtle">{reaction.count}</span></span>)}</div>}
@@ -305,7 +317,7 @@ export function ChatView() {
       {voicePreview && <div className="border-t border-border bg-surface px-3 py-2"><audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; setVoicePreview((preview) => preview ? { ...preview, duration } : preview); }} onEnded={() => setPreviewPlaying(false)} className="hidden" /><div className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-[#fff8fa] px-3 py-2.5"><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>{previewPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}</Button><div className="flex min-w-0 flex-1 items-center gap-[3px]">{waveform.map((height, index) => <span key={index} className="w-[3px] shrink-0 rounded-full bg-primary/60" style={{ height }} />)}</div><span className="min-w-[38px] text-right text-xs text-muted">{voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : "Ready"}</span><Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-danger hover:bg-danger/10" onClick={clearVoicePreview} aria-label="Delete voice note"><Trash2 className="size-4" /></Button><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={sendPreview} aria-label="Send voice note"><Send className="size-4" /></Button></div></div>}
 
       {mediaPreview && <div className="border-t border-border bg-surface px-3 py-3"><div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#fff8fa] p-2"><Button type="button" variant="ghost" size="icon" className="absolute right-2 top-2 z-10 size-8 rounded-full bg-black/55 text-white hover:bg-black/70" onClick={clearMediaPreview} aria-label="Cancel media preview"><X className="size-4" /></Button>{mediaPreview.kind === "image" ? <img src={mediaPreview.url} alt="Photo preview" className="max-h-64 w-full rounded-xl object-cover" /> : <video src={mediaPreview.url} controls className="max-h-64 w-full rounded-xl bg-black" />}<div className="mt-2 flex items-center gap-2"><input value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Add a caption" className="min-h-10 flex-1 rounded-full border border-border bg-white px-4 text-sm text-fg outline-none focus:border-primary" aria-label="Media caption" /><Button type="button" size="icon" className="size-10 shrink-0 rounded-full" onClick={sendMediaPreview} aria-label="Send media"><Send className="size-4" /></Button></div></div></div>}
-      {stickerTrayOpen && <div className="border-t border-border bg-surface px-3 py-3"><div className="mb-2 flex items-center justify-between"><p className="text-xs font-semibold text-muted">Your stickers</p><Button type="button" size="sm" variant="secondary" onClick={() => gifRef.current?.click()}>Import WebP/GIF/PNG</Button></div>{stickers.length === 0 ? <p className="rounded-xl bg-mist px-3 py-4 text-center text-xs text-muted">Import WhatsApp stickers here once. They stay in this tray on this device.</p> : <div className="grid max-h-44 grid-cols-6 gap-2 overflow-y-auto">{stickers.map((sticker, index) => <button key={`${sticker.slice(0, 20)}-${index}`} type="button" className="aspect-square rounded-xl border border-border bg-mist p-1 hover:border-primary" onClick={() => void sendSavedSticker(sticker)}><img src={sticker} alt="Saved sticker" className="size-full object-contain" /></button>)}</div>}</div>}
+      {stickerTrayOpen && <div className="border-t border-border bg-surface px-3 py-3"><div className="mb-2 flex items-center justify-between"><div><p className="text-xs font-semibold text-muted">Sticker tree</p><p className="text-[11px] text-subtle">Tap to send · long-press or save to favorites</p></div><Button type="button" size="sm" variant="secondary" onClick={() => gifRef.current?.click()}>Add from files</Button></div><div className="mb-3 flex gap-1 overflow-x-auto"><Button type="button" size="sm" variant={stickerTab === "flink" ? "default" : "ghost"} onClick={() => setStickerTab("flink")}>Flink pack</Button><Button type="button" size="sm" variant={stickerTab === "saved" ? "default" : "ghost"} onClick={() => setStickerTab("saved")}>My imports</Button><Button type="button" size="sm" variant={stickerTab === "favorites" ? "default" : "ghost"} onClick={() => setStickerTab("favorites")}>Favorites</Button></div><div className="grid max-h-44 grid-cols-6 gap-2 overflow-y-auto">{(stickerTab === "flink" ? flinkStarterStickers : stickerTab === "favorites" ? favoriteStickers : stickers).map((sticker, index) => <div key={`${sticker.slice(0, 20)}-${index}`} className="relative aspect-square rounded-xl border border-border bg-mist p-1 hover:border-primary"><button type="button" className="size-full" onClick={() => void sendSavedSticker(sticker)}><img src={sticker} alt="Sticker" className="size-full object-contain" /></button>{stickerTab !== "favorites" && <button type="button" className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] text-white" onClick={() => void favoriteSticker(sticker)} aria-label="Save sticker to favorites">★</button>}</div>)}</div></div>}
       {replyingTo && <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-2 text-xs"><Reply className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Replying to {replyingTo.from}: {replyingTo.text || replyingTo.caption || replyingTo.fileName || replyingTo.kind}</span><Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><X className="size-4" /></Button></div>}
       <form className="flex items-end gap-2 border-t border-border bg-[#fff8fa] px-2 py-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } }}>
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "image"); e.target.value = ""; }} />
