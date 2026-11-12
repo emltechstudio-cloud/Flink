@@ -3,7 +3,7 @@ import { ArrowLeft, FileText, Film, Image as ImageIcon, Mic, Paperclip, Pause, P
 import { Button } from "@/components/ui/button";
 import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
-import { formatFlinkNumber, formatTime } from "@/lib/utils";
+import { formatFlinkNumber, formatTime, formatDuration } from "@/lib/utils";
 import type { ChatMessage } from "@/lib/flink/types";
 import { flinkStorage } from "@/lib/flink/storage";
 
@@ -31,6 +31,7 @@ export function ChatView() {
   const [mediaPreview, setMediaPreview] = useState<MediaPreview | null>(null);
   const [mediaCaption, setMediaCaption] = useState("");
   const [previewPlaying, setPreviewPlaying] = useState(false);
+  const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [recordingError, setRecordingError] = useState<string | null>(null);
   const [emojiComposerOpen, setEmojiComposerOpen] = useState(false);
@@ -441,15 +442,27 @@ export function ChatView() {
                 
                 {m.kind === "voice" && m.audioUrl && (
                   <div className="mb-2 flex items-center gap-2 rounded-lg bg-white/50 p-2">
-                    <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full hover:bg-white/50 p-0" onClick={() => { const audio = document.getElementById(`audio-${m.id}`) as HTMLAudioElement; if (audio) audio.paused ? audio.play() : audio.pause(); }} aria-label="Play voice note">
-                      <Play className="size-4" />
+                    <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full hover:bg-white/50 p-0" onClick={() => {
+                      const audio = document.getElementById(`audio-${m.id}`) as HTMLAudioElement;
+                      if (audio) {
+                        if (audio.paused) {
+                          audio.play();
+                          setPlayingVoiceId(m.id);
+                        } else {
+                          audio.pause();
+                          setPlayingVoiceId(null);
+                        }
+                      }
+                    }} aria-label={playingVoiceId === m.id ? "Pause voice note" : "Play voice note"}>
+                      {playingVoiceId === m.id ? <Pause className="size-4" /> : <Play className="size-4" />}
                     </Button>
                     <div className="flex flex-1 items-center gap-0.5">
                       {waveform.slice(0, 15).map((height, index) => (
-                        <span key={index} className="w-[2px] shrink-0 rounded-full bg-primary/60 animate-pulse" style={{ height: `${height * 0.7}px` }} />
+                        <span key={index} className={`w-[2px] shrink-0 rounded-full bg-primary/60 ${playingVoiceId === m.id ? "" : "animate-pulse"}`} style={{ height: `${height * 0.7}px` }} />
                       ))}
                     </div>
-                    <audio id={`audio-${m.id}`} src={m.audioUrl} preload="metadata" className="hidden" onError={() => setRecordingError("A received voice note could not be loaded or played.")} />
+                    {m.duration && <span className="text-[11px] text-muted">{formatDuration(m.duration)}</span>}
+                    <audio id={`audio-${m.id}`} src={m.audioUrl} preload="metadata" className="hidden" onEnded={() => setPlayingVoiceId(null)} onError={() => setRecordingError("A received voice note could not be loaded or played.")} />
                   </div>
                 )}
                 
@@ -467,15 +480,15 @@ export function ChatView() {
                     <img 
                       src={m.imageUrl} 
                       alt="Sticker" 
-                      className="mb-3 max-h-48 max-w-48 rounded-[12px] object-contain shadow-md" 
+                      className="mb-2 max-h-40 max-w-40 rounded-lg object-contain shadow-sm" 
                       onError={(event) => { 
                         event.currentTarget.hidden = true; 
                         setRecordingError("This sticker image could not be displayed."); 
                       }} 
                     />
-                    <button type="button" className="mb-2 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>
-                      \u2605 Save sticker
-                    </button>
+                    <button type="button" className="mb-1 text-[10px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>
+                      ★ Save
+
                   </>
                 )}
                 
@@ -689,25 +702,28 @@ export function ChatView() {
         <input ref={gifRef} type="file" accept="*/*" multiple className="hidden" onChange={(e) => { void importStickers(e.target.files || undefined); e.target.value = ""; }} />
         <input ref={fileUploadRef} type="file" accept="*/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); e.target.value = ""; }} />
 
-        {/* Emoji Button */}
-        <div className="relative">
-          <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji">
-            <Smile className="size-5" />
-          </Button>
-
-          {/* Emoji Composer - More Compact */}
-          {emojiComposerOpen && (
-            <div className="absolute bottom-12 left-0 z-20 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl">
-              {["\ud83d\ude00", "\ud83d\ude02", "\ud83d\ude0d", "\ud83e\udd79", "\ud83d\ude0e", "\ud83d\ude22", "\ud83d\ude21", "\ud83d\udc4d", "\ud83d\udc4e", "\ud83d\udc4f", "\ud83d\ude4f", "\ud83d\udd25", "\ud83c\udf89", "\u2764\ufe0f", "\u2728", "\ud83d\ude80", "\ud83d\udcac", "\ud83e\udd1d", "\u2705", "\u274c"].map((emoji) => (
-                <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
+        {/* Left Side: Emoji + Sticker Buttons */}
+        <div className="flex gap-0.5">
+          {/* Emoji Button */}
+          <div className="relative">
+            <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji">
+              <Smile className="size-5" />
+            </Button>
+            {/* Emoji Composer */}
+            {emojiComposerOpen && (
+              <div className="absolute bottom-12 left-0 z-20 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl">
+                {"😀,😂,😍,🥰,😎,😢,😡,👍,👎,👏,🤟,💪,🎉,❤️,💔,🚀,💬,🦍,✅,❌,🏆,🤣".split(",").map((emoji) => (
+                  <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>
+                    {emoji}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           
-          <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach">
-            <Paperclip className="size-5" />
+          {/* Sticker Button */}
+          <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setStickerTrayOpen((open) => !open)} aria-label="Stickers">
+            <ImageIcon className="size-5" />
           </Button>
         </div>
 
@@ -730,47 +746,56 @@ export function ChatView() {
           }}
         />
 
-        {/* Voice Record / Send Button - More Compact */}
-        {!draft.trim() && (
-          <Button 
-            type="button" 
-            variant="ghost" 
-            size="icon" 
-            className={`size-9 rounded-full transition-colors ${
-              recordingVoice 
-                ? "bg-danger hover:bg-danger/90 text-white" 
-                : "text-primary hover:bg-primary/10"
-            }`} 
-            onClick={() => void toggleVoiceRecording()} 
-            aria-label={recordingVoice ? "Stop recording" : "Record voice note"}
-          >
-            {recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}
-          </Button>
-        )}
-        
-        {draft.trim() && (
-          <Button type="submit" size="icon" className="size-9 rounded-full bg-primary hover:bg-primary/90 text-white transition-colors" aria-label="Send message">
-            <Send className="size-4" />
-          </Button>
-        )}
-        
-        {/* Attach Menu - More Compact */}
-        {fileMenuOpen && (
-          <div className="absolute bottom-12 right-12 z-20 min-w-[140px] rounded-xl border border-border bg-surface p-1 shadow-xl">
-            <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}>
-              <FileText className="size-4 text-primary" />
-              <span>Photo</span>
-            </button>
-            <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}>
-              <Film className="size-4 text-primary" />
-              <span>Video</span>
-            </button>
-            <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}>
-              <FileText className="size-4 text-primary" />
-              <span>File</span>
-            </button>
+        {/* Right Side: Attach + Voice/Send Buttons */}
+        <div className="flex gap-0.5">
+          {/* Attach/Pin Button */}
+          <div className="relative">
+            <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach">
+              <Paperclip className="size-5" />
+            </Button>
+            {/* Attach Menu - Video, Audio, File */}
+            {fileMenuOpen && (
+              <div className="absolute bottom-12 right-0 z-20 min-w-[140px] rounded-xl border border-border bg-surface p-1 shadow-xl">
+                <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}>
+                  <Film className="size-4 text-primary" />
+                  <span>Video</span>
+                </button>
+                <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}>
+                  <Mic className="size-4 text-primary" />
+                  <span>Audio</span>
+                </button>
+                <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}>
+                  <FileText className="size-4 text-primary" />
+                  <span>File</span>
+                </button>
+              </div>
+            )}
           </div>
-        )}
+          
+          {/* Voice Record / Send Button */}
+          {!draft.trim() && (
+            <Button 
+              type="button" 
+              variant="ghost" 
+              size="icon" 
+              className={`size-9 rounded-full transition-colors ${
+                recordingVoice 
+                  ? "bg-danger hover:bg-danger/90 text-white" 
+                  : "text-primary hover:bg-primary/10"
+              }`} 
+              onClick={() => void toggleVoiceRecording()} 
+              aria-label={recordingVoice ? "Stop recording" : "Record voice note"}
+            >
+              {recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}
+            </Button>
+          )}
+          
+          {draft.trim() && (
+            <Button type="submit" size="icon" className="size-9 rounded-full bg-primary hover:bg-primary/90 text-white transition-colors" aria-label="Send message">
+              <Send className="size-4" />
+            </Button>
+          )}
+        </div>
       </form>
 
       {/* Message Actions Menu (Reactions) - More Compact */}
@@ -803,20 +828,20 @@ function renderLinkedText(value?: string) {
   const parts = value.split(/(https?:\/\/[^\s]+)/g);
   return parts.map((part, index) => {
     if (!/^https?:\/\//.test(part)) return <span key={`${part}-${index}`}>{part}</span>;
-    let host = part;
-    let label = "Open shared link";
-    try { const url = new URL(part); host = url.hostname.replace(/^www\./, ""); if (url.hash.startsWith("#room/")) label = "Join Flink group room"; } catch { /* keep raw URL */ }
-    return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="my-2 flex items-center gap-3 rounded-xl border border-primary/15 bg-primary/5 px-4 py-3 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors">
-      <span className="flex size-8 items-center justify-center rounded-lg bg-primary/10"><LinkIcon /></span>
-      <span className="min-w-0">
-        <span className="block text-xs font-semibold">{label}</span>
-        <span className="block max-w-[220px] truncate text-[11px] opacity-70">{host}</span>
-      </span>
+    try {
+      const url = new URL(part);
+      if (url.hostname.includes("flink") || url.hash.startsWith("#room/")) {
+        return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-1.5 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors text-[13px]">
+          <span className="text-xs">🔗</span>
+          <span className="min-w-0 truncate max-w-[200px]">{url.hash.startsWith("#room/") ? "Join Flink Room" : part}</span>
+        </a>;
+      }
+    } catch { /* keep raw URL */ }
+    return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="text-primary underline hover:no-underline text-[13px]">
+      {part}
     </a>;
   });
 }
-
-function LinkIcon() { return <span className="text-xs">\u2197</span>; }
 
 function fileToDataUrl(file: File) {
   return new Promise<string>((resolve, reject) => {
