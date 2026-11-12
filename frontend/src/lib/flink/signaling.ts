@@ -8,6 +8,8 @@ export type SignalingHandlers = {
 };
 
 export class SignalingSocket {
+  private static readonly MAX_RETRY_DELAY_MS = 30_000;
+  private static readonly INITIAL_RETRY_DELAY_MS = 600;
   private ws: WebSocket | null = null;
   private closed = false;
   private retry = 0;
@@ -22,28 +24,38 @@ export class SignalingSocket {
   ) {}
 
   connect() {
+    if (!this.closed && this.ws && this.ws.readyState !== WebSocket.CLOSED) return;
     this.closed = false;
+    if (this.timer) clearTimeout(this.timer);
+    this.timer = null;
     this.open();
   }
 
   private open() {
-    if (this.closed) return;
+    if (this.closed || (this.ws && (this.ws.readyState === WebSocket.CONNECTING || this.ws.readyState === WebSocket.OPEN))) return;
     const tokenQ = this.token ? `?token=${encodeURIComponent(this.token)}` : "";
     const url = `${FLINK_WS_URL}/flink/ws/${encodeURIComponent(this.sessionId)}${tokenQ}`;
     const ws = new WebSocket(url);
     this.ws = ws;
     ws.onopen = () => {
+      if (this.ws !== ws || this.closed) {
+        ws.close();
+        return;
+      }
       this.retry = 0;
-      for (const message of this.queue.splice(0)) {
+      while (this.queue.length && ws.readyState === WebSocket.OPEN) {
         try {
-          ws.send(message);
+          // Remove only after send succeeds; a failed attempt and all following
+          // messages remain queued in original order for the next connection.
+          ws.send(this.queue[0]);
+          this.queue.shift();
         } catch {
-          this.queue.unshift(message);
           break;
         }
       }
     };
     ws.onmessage = (ev) => {
+      if (this.ws !== ws || this.closed) return;
       try {
         const event = JSON.parse(String(ev.data)) as SignalEvent;
         if (event.type === "ready") {
@@ -56,12 +68,20 @@ export class SignalingSocket {
       }
     };
     ws.onclose = () => {
+      if (this.ws !== ws) return;
       this.handlers.onClose?.();
       if (this.closed) return;
-      const wait = Math.min(8000, 600 * 2 ** this.retry++);
-      this.timer = setTimeout(() => this.open(), wait);
+      const exponential = Math.min(SignalingSocket.MAX_RETRY_DELAY_MS,
+        SignalingSocket.INITIAL_RETRY_DELAY_MS * 2 ** Math.min(this.retry++, 10));
+      // Jitter prevents a group of clients from repeatedly reconnecting in lockstep.
+      const wait = Math.round(exponential * (0.8 + Math.random() * 0.4));
+      this.timer = setTimeout(() => {
+        this.timer = null;
+        this.open();
+      }, wait);
     };
     ws.onerror = () => {
+      if (this.ws !== ws) return;
       try {
         ws.close();
       } catch {
@@ -76,8 +96,15 @@ export class SignalingSocket {
       if (!this.closed) this.queue.push(message);
       return false;
     }
-    this.ws.send(message);
-    return true;
+    try {
+      this.ws.send(message);
+      return true;
+    } catch {
+      // Preserve the message if the transport fails during send.
+      if (!this.closed) this.queue.push(message);
+      try { this.ws.close(); } catch { /* noop */ }
+      return false;
+    }
   }
 
   close() {

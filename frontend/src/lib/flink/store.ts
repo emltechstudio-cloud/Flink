@@ -140,11 +140,21 @@ function deviceId() {
 function threadIdFor(number: string) {
   return `d-${number}`;
 }
+function groupThreadId(groupId: string) {
+  return `g-${groupId}`;
+}
 
 async function deliverChat(threadId: string, payload: Parameters<FlinkSession["sendChat"]>[0]) {
   const state = useFlink.getState();
   const profile = state.profile;
-  const payloadWithAvatar = profile?.avatarDataUrl ? { ...payload, avatarDataUrl: profile.avatarDataUrl } : payload;
+  const groupThread = threadId.startsWith("g-") ? state.threads.find((thread) => thread.id === threadId) : undefined;
+  const group = groupThread && state.groups.find((item) => item.group_id === groupThread.groupId);
+  // Add optional group context only for group-thread messages; legacy P2P payloads stay unchanged.
+  const payloadWithAvatar = {
+    ...payload,
+    ...(profile?.avatarDataUrl ? { avatarDataUrl: profile.avatarDataUrl } : {}),
+    ...(groupThread ? { group_id: groupThread.groupId ?? threadId.slice(2), group_name: group?.name ?? groupThread.title } : {}),
+  };
   const peer = threadId.startsWith("d-") ? threadId.slice(2) : "";
   if ((!state.session || state.sessionEnded) && /^\d{6}$/.test(peer)) {
     void state.startNewSession(peer);
@@ -165,10 +175,14 @@ async function deliverChat(threadId: string, payload: Parameters<FlinkSession["s
   return false;
 }
 
-async function flushChatOutbox() {
+const flushingOutboxThreads = new Set<string>();
+async function flushChatOutbox(threadId: string) {
+  if (flushingOutboxThreads.has(threadId)) return;
+  flushingOutboxThreads.add(threadId);
+  try {
   const session = useFlink.getState().session;
   if (!session) return;
-  const pending = await flinkStorage.getOutbox();
+  const pending = (await flinkStorage.getOutbox()).filter((item) => item.threadId === threadId);
   for (const item of pending) {
     if (!session.sendChat(item.payload as Parameters<FlinkSession["sendChat"]>[0])) continue;
     await flinkStorage.deleteOutbox(item.id);
@@ -176,6 +190,9 @@ async function flushChatOutbox() {
     useFlink.setState((state) => ({
       messages: state.messages.map((message) => message.id === item.id ? { ...message, status: "sent" as const } : message),
     }));
+  }
+  } finally {
+    flushingOutboxThreads.delete(threadId);
   }
 }
 
@@ -566,7 +583,12 @@ export const useFlink = create<FlinkState>((set, get) => ({
         }
       }
       set({ busy: false });
-      await joinSession(sid, mode, group.name);
+      const threadId = groupThreadId(group.group_id);
+      const thread = get().threads.find((item) => item.id === threadId) ?? { id: threadId, kind: "group" as const, title: group.name, groupId: group.group_id, lastText: "", lastTs: 0 };
+      await flinkStorage.putThread(thread);
+      const messages = await flinkStorage.getMessages(threadId);
+      set((state) => ({ threads: [thread, ...state.threads.filter((item) => item.id !== thread.id)], activeThread: thread, messages }));
+      await joinSession(sid, mode, group.name, { groupId: group.group_id, groupName: group.name });
     } catch (err) {
       set({ busy: false, outgoing: null });
       toast.error(err instanceof Error ? err.message : "Could not ping the group");
@@ -578,7 +600,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
     if (!incoming) return;
     stopRingtone();
     set({ incoming: null });
-    await joinSession(incoming.sessionId, incoming.mode, incoming.from);
+    await joinSession(incoming.sessionId, incoming.mode, incoming.from, incoming.groupId ? { groupId: incoming.groupId, groupName: incoming.groupName ?? incoming.groupId } : undefined);
   },
 
   declineIncoming() {
@@ -610,6 +632,15 @@ export const useFlink = create<FlinkState>((set, get) => ({
   },
 
   async openThread(thread) {
+    if (thread.kind === "group" && thread.groupId) {
+      const group = get().groups.find((item) => item.group_id === thread.groupId);
+      if (group) {
+        await get().approachGroup(group, "chat");
+        return;
+      }
+      toast.error("This group is unavailable. Refresh your groups and try again.");
+      return;
+    }
     const messages = await flinkStorage.getMessages(thread.id);
     set({ activeThread: thread, messages, view: "chat" });
     for (const message of messages) {
@@ -794,8 +825,9 @@ export const useFlink = create<FlinkState>((set, get) => ({
   },
 
   async sendVideo(file, caption = "", replyTo) {
-    if (file.size > 60_000_000) {
-      toast.error("Keep videos under 60 MB");
+    // The data-channel cap is 32 MiB after base64 expansion; 24 MB raw stays below it.
+    if (file.size > 24_000_000) {
+      toast.error("Keep videos under 24 MB for reliable peer transfer");
       return;
     }
     const thread = get().activeThread;
@@ -1039,7 +1071,8 @@ function startMailbox() {
   useFlink.setState({ mailbox: sock });
 }
 
-async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
+async function joinSession(sid: string, mode: CommMode, peerLabel: string, groupContext?: { groupId: string; groupName: string }) {
+  const threadId = groupContext ? groupThreadId(groupContext.groupId) : threadIdFor(peerLabel);
   const prev = useFlink.getState().session;
   prev?.close();
   let stream: MediaStream | undefined;
@@ -1056,12 +1089,41 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
   const identity = useFlink.getState().profile;
   const session = new FlinkSession(sid, identity?.accessToken, mode, {
     onStatus: (text) => useFlink.setState({ callStatus: text }),
+    onTransferFailed: (data) => {
+      void (async () => {
+        await flinkStorage.putOutbox({
+          id: data.id,
+          threadId,
+          payload: data as unknown as Record<string, unknown>,
+          createdAt: Date.now(),
+          attempts: 0,
+        });
+        await flinkStorage.updateMessageStatus(data.id, "pending");
+        useFlink.setState((state) => ({
+          messages: state.messages.map((message) => message.id === data.id ? { ...message, status: "pending" as const } : message),
+        }));
+      })().catch((error) => console.error("Could not retain failed media transfer", error));
+    },
     onConnected: async () => {
       stopRingtone();
-      void flushChatOutbox();
+      void flushChatOutbox(threadId);
       if (mode === "voice" || mode === "video") {
         if (!useFlink.getState().callConnectedAt) useFlink.setState({ callConnectedAt: Date.now() });
         void finishCurrentCall("connected");
+      }
+      if (groupContext) {
+        const id = groupThreadId(groupContext.groupId);
+        const thread = useFlink.getState().threads.find((item) => item.id === id) ?? {
+          id, kind: "group" as const, title: groupContext.groupName, groupId: groupContext.groupId, lastText: "", lastTs: 0,
+        };
+        await flinkStorage.putThread(thread);
+        const messages = await flinkStorage.getMessages(id);
+        useFlink.setState((state) => ({
+          threads: [thread, ...state.threads.filter((item) => item.id !== id)],
+          activeThread: state.activeThread?.id === id || !state.activeThread ? thread : state.activeThread,
+          messages: state.activeThread?.id === id || !state.activeThread ? messages : state.messages,
+          view: mode === "voice" || mode === "video" ? state.view : "chat",
+        }));
       }
       const number = /^\d{6}$/.test(peerLabel) ? peerLabel : undefined;
       if (number) {
@@ -1085,8 +1147,11 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       }
     },
     onChat: async (from, data) => {
+      const chatData = data as typeof data & { group_id?: string; group_name?: string };
+      const groupId = chatData.group_id ?? groupContext?.groupId;
+      const groupName = chatData.group_name ?? groupContext?.groupName ?? groupId;
       const number = /^\d{6}$/.test(from) ? from : peerLabel;
-      const tid = threadIdFor(number);
+      const tid = groupId ? groupThreadId(groupId) : threadIdFor(number);
       if (/^\d{6}$/.test(number) && data.avatarDataUrl) {
         const existing = useFlink.getState().contacts.find((contact) => contact.flinkNumber === number);
         const contact: Contact = { flinkNumber: number, name: existing?.name || number, lastSeen: Date.now(), avatarDataUrl: data.avatarDataUrl };
@@ -1183,14 +1248,16 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       if (existingMessages.some((message) => message.id === msg.id)) return;
       await flinkStorage.putMessage(msg);
       const active = useFlink.getState().activeThread?.id === tid;
+      const previousThread = useFlink.getState().threads.find((item) => item.id === tid);
       const thread: Thread = {
         id: tid,
-        kind: "direct",
-        title: number,
-        peerNumber: number,
+        kind: groupId ? "group" : "direct",
+        title: groupName ?? number,
+        peerNumber: groupId ? undefined : number,
+        groupId,
         lastText: data.caption || data.text || (data.kind === "image" ? "Photo" : data.kind === "voice" ? "Voice note" : data.kind === "video" ? "Video" : data.kind === "gif" ? "GIF" : data.kind === "file" ? data.fileName || "File" : ""),
         lastTs: data.ts,
-        unreadCount: active ? 0 : (useFlink.getState().threads.find((item) => item.id === tid)?.unreadCount ?? 0) + 1,
+        unreadCount: active ? 0 : (previousThread?.unreadCount ?? 0) + 1,
       };
       await flinkStorage.putThread(thread);
       useFlink.setState((s) => ({
@@ -1265,7 +1332,7 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
     outgoing: mode === "voice" || mode === "video" ? { to: peerLabel, mode, sessionId: sid } : useFlink.getState().outgoing,
     view: mode === "chat" || mode === "ping" ? "chat" : useFlink.getState().view,
   });
-  void flushChatOutbox();
+  void flushChatOutbox(threadId);
   if (mode === "chat" || mode === "ping") {
     const number = /^\d{6}$/.test(peerLabel) ? peerLabel : undefined;
     if (number) {

@@ -17,7 +17,7 @@ export function RoomsView() {
 
   function create() {
     const room = startRoom(mode, title || `${mode} room`);
-    const url = `${room.url}&host=${profile?.flinkNumber ?? ""}`;
+    const url = `${room.url}${room.url.includes("?") ? "&" : "?"}host=${encodeURIComponent(profile?.flinkNumber ?? "")}`;
     setLink(url);
   }
 
@@ -82,7 +82,7 @@ export function RoomsView() {
       )}
       <section className="mt-6">
         <p className="mb-2 text-xs font-semibold tracking-[0.14em] text-muted uppercase">Your rooms</p>
-        {rooms.length === 0 ? <p className="text-sm text-muted">Created links will stay here for later host re-entry.</p> : rooms.map((room) => <div key={room.id} className="mb-2 rounded-[18px] border border-border bg-surface p-3"><div className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate font-semibold">{room.title}</p><p className="text-xs text-muted">{room.mode} · {new Date(room.lastOpenedAt).toLocaleString()}</p></div><Button size="icon" variant="ghost" aria-label={`Open ${room.title}`} onClick={() => { window.location.href = `${room.url}&host=${room.hostNumber ?? profile?.flinkNumber ?? ""}`; }}><ExternalLink className="size-4" /></Button><Button size="icon" variant="ghost" aria-label={`Copy ${room.title}`} onClick={() => void navigator.clipboard.writeText(`${room.url}&host=${room.hostNumber ?? profile?.flinkNumber ?? ""}`)}><Copy className="size-4" /></Button></div></div>)}
+        {rooms.length === 0 ? <p className="text-sm text-muted">Created links will stay here for later host re-entry.</p> : rooms.map((room) => { const roomUrl = `${room.url}${room.url.includes("?") ? "&" : "?"}host=${encodeURIComponent(room.hostNumber ?? profile?.flinkNumber ?? "")}`; return <div key={room.id} className="mb-2 rounded-[18px] border border-border bg-surface p-3"><div className="flex items-center gap-2"><div className="min-w-0 flex-1"><p className="truncate font-semibold">{room.title}</p><p className="text-xs text-muted">{room.mode} · {new Date(room.lastOpenedAt).toLocaleString()}</p></div><Button size="icon" variant="ghost" aria-label={`Open ${room.title}`} onClick={() => { window.location.href = roomUrl; }}><ExternalLink className="size-4" /></Button><Button size="icon" variant="ghost" aria-label={`Copy ${room.title}`} onClick={() => void navigator.clipboard.writeText(roomUrl)}><Copy className="size-4" /></Button></div></div>; })}
       </section>
     </div>
   );

@@ -10,7 +10,8 @@ type PeerSlot = {
   makingOffer: boolean;
   ignoreOffer: boolean;
   pending: RTCIceCandidateInit[];
-  transfers: Map<string, { total: number; received: string[]; meta: ChatData; field: "image" | "audio" | "video" | "file" }>;
+  transfers: Map<string, { total: number; received: string[]; receivedBytes: number; meta: ChatData; field: "image" | "audio" | "video" | "file"; timer: ReturnType<typeof setTimeout> }>;
+  sendQueue: Promise<void>;
 };
 
 export type ChatData = {
@@ -33,6 +34,8 @@ export type ChatData = {
   displayName?: string;
   replyTo?: { id: string; from: string; preview: string };
   avatarDataUrl?: string;
+  group_id?: string;
+  group_name?: string;
 };
 
 export type SessionHandlers = {
@@ -46,6 +49,7 @@ export type SessionHandlers = {
   onMessageDelivered?: (messageId: string) => void;
   onMessageRead?: (messageId: string) => void;
   onScreenShare?: (peerId: string, sharing: boolean) => void;
+  onTransferFailed?: (data: ChatData) => void;
 };
 
 export class FlinkSession {
@@ -58,6 +62,10 @@ export class FlinkSession {
   private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   closed = false;
   private static readonly CHUNK_SIZE = 48_000;
+  private static readonly MAX_TRANSFER_SIZE = 32 * 1024 * 1024;
+  private static readonly MAX_TRANSFER_CHUNKS = Math.ceil(FlinkSession.MAX_TRANSFER_SIZE / FlinkSession.CHUNK_SIZE);
+  private static readonly MAX_ACTIVE_TRANSFERS = 4;
+  private static readonly MAX_BUFFERED_AMOUNT = 1_000_000;
 
   constructor(
     readonly sessionId: string,
@@ -109,30 +117,29 @@ export class FlinkSession {
       const transferId = `${data.id}-${field}`;
       const value = String(data[field]);
       const total = Math.ceil(value.length / FlinkSession.CHUNK_SIZE);
-      const meta = { ...data, [field]: undefined } as ChatData;
-      slot.channel.send(JSON.stringify({ v: 1, kind: "chunk_start", transferId, total, field, meta }));
-      for (let index = 0; index < total; index += 1) {
-        const chunk = JSON.stringify({
-          v: 1,
-          kind: "chunk",
-          transferId,
-          index,
-          data: value.slice(index * FlinkSession.CHUNK_SIZE, (index + 1) * FlinkSession.CHUNK_SIZE),
-        });
-        const send = () => {
-          if (slot.channel?.readyState === "open") slot.channel.send(chunk);
-        };
-        if (slot.channel.bufferedAmount > 1_000_000) {
-          const wait = () => {
-            if (slot.channel?.readyState !== "open") return;
-            if (slot.channel.bufferedAmount <= 250_000) send();
-            else setTimeout(wait, 30);
-          };
-          wait();
-        } else {
-          send();
-        }
+      if (value.length > FlinkSession.MAX_TRANSFER_SIZE || total > FlinkSession.MAX_TRANSFER_CHUNKS) {
+        delivered = false;
+        this.handlers.onStatus("Message is too large to send");
+        continue;
       }
+      const meta = { ...data, [field]: undefined } as ChatData;
+      slot.sendQueue = slot.sendQueue.then(async () => {
+        try {
+          const channel = slot.channel;
+          if (this.closed || channel?.readyState !== "open") throw new Error("Data channel is unavailable");
+          await this.waitForChannelCapacity(channel);
+          channel.send(JSON.stringify({ v: 1, kind: "chunk_start", transferId, total, field, meta }));
+          for (let index = 0; index < total; index += 1) {
+            await this.waitForChannelCapacity(channel);
+            if (this.closed || channel.readyState !== "open") throw new Error("Data channel closed during transfer");
+            channel.send(JSON.stringify({ v: 1, kind: "chunk", transferId, index, data: value.slice(index * FlinkSession.CHUNK_SIZE, (index + 1) * FlinkSession.CHUNK_SIZE) }));
+          }
+        } catch (error) {
+          console.warn("chunked message send failed", error);
+          this.handlers.onStatus("Message transfer failed — try again");
+          this.handlers.onTransferFailed?.(data);
+        }
+      });
     }
     return delivered;
   }
@@ -160,6 +167,8 @@ export class FlinkSession {
     this.signaling.send("session-leave", {});
     this.signaling.close();
     for (const slot of this.peers.values()) {
+      for (const transfer of slot.transfers.values()) clearTimeout(transfer.timer);
+      slot.transfers.clear();
       try {
         slot.channel?.close();
       } catch {
@@ -247,6 +256,7 @@ export class FlinkSession {
       ignoreOffer: false,
       pending: [],
       transfers: new Map(),
+      sendQueue: Promise.resolve(),
     };
     this.peers.set(id, slot);
 
@@ -358,21 +368,39 @@ export class FlinkSession {
           field?: "image" | "audio" | "video" | "file";
           meta?: ChatData;
         };
-        if (data.kind === "chunk_start" && data.transferId && data.total && data.field && data.meta) {
+        if (data.kind === "chunk_start" && typeof data.transferId === "string" && data.transferId.length > 0 && data.transferId.length <= 256 && Number.isSafeInteger(data.total) && data.total! > 0 && data.total! <= FlinkSession.MAX_TRANSFER_CHUNKS && ["image", "audio", "video", "file"].includes(data.field ?? "") && data.meta && typeof data.meta === "object") {
+          const old = slot.transfers.get(data.transferId);
+          if (old) clearTimeout(old.timer);
+          if (!old && slot.transfers.size >= FlinkSession.MAX_ACTIVE_TRANSFERS) return;
+          const timer = setTimeout(() => slot.transfers.delete(data.transferId!), 60_000);
           slot.transfers.set(data.transferId, {
-            total: data.total,
-            received: new Array(data.total),
+            total: data.total!,
+            received: new Array(data.total!),
+            receivedBytes: 0,
             meta: data.meta,
-            field: data.field,
+            field: data.field!,
+            timer,
           });
           return;
         }
         if (data.kind === "chunk" && data.transferId && typeof data.index === "number" && typeof data.data === "string") {
           const transfer = slot.transfers.get(data.transferId);
-          if (!transfer || data.index >= transfer.total) return;
+          if (!transfer || !Number.isSafeInteger(data.index) || data.index! < 0 || data.index! >= transfer.total || data.data.length > FlinkSession.CHUNK_SIZE) return;
+          if (transfer.received[data.index] !== undefined) return;
+          if (transfer.receivedBytes + data.data.length > FlinkSession.MAX_TRANSFER_SIZE) {
+            clearTimeout(transfer.timer);
+            slot.transfers.delete(data.transferId);
+            return;
+          }
           transfer.received[data.index] = data.data;
-          if (transfer.received.every(Boolean)) {
+          transfer.receivedBytes += data.data.length;
+          clearTimeout(transfer.timer);
+          transfer.timer = setTimeout(() => slot.transfers.delete(data.transferId!), 60_000);
+          // Array.prototype.every skips holes in sparse arrays; count explicit
+          // chunks instead so a transfer is not completed after only chunk 0.
+          if (transfer.received.filter((part) => typeof part === "string").length === transfer.total) {
             const complete = { ...transfer.meta, [transfer.field]: transfer.received.join("") };
+            clearTimeout(transfer.timer);
             slot.transfers.delete(data.transferId);
             this.handlers.onChat(slot.flinkNumber || slot.id, complete);
           }
@@ -383,6 +411,26 @@ export class FlinkSession {
         /* ignore */
       }
     }
+  }
+
+  private waitForChannelCapacity(channel: RTCDataChannel): Promise<void> {
+    if (channel.bufferedAmount <= FlinkSession.MAX_BUFFERED_AMOUNT) return Promise.resolve();
+    return new Promise((resolve, reject) => {
+      const startedAt = Date.now();
+      const check = () => {
+        if (this.closed || channel.readyState !== "open") {
+          reject(new Error("Data channel unavailable"));
+          return;
+        }
+        if (Date.now() - startedAt >= 60_000) {
+          reject(new Error("Data channel remained congested"));
+          return;
+        }
+        if (channel.bufferedAmount <= 250_000) resolve();
+        else setTimeout(check, 30);
+      };
+      check();
+    });
   }
 
   private async handleOffer(slot: PeerSlot, desc: RTCSessionDescriptionInit) {
@@ -422,6 +470,8 @@ export class FlinkSession {
   private dropPeer(id: string) {
     const slot = this.peers.get(id);
     if (!slot) return;
+    for (const transfer of slot.transfers.values()) clearTimeout(transfer.timer);
+    slot.transfers.clear();
     slot.pc.close();
     const timer = this.reconnectTimers.get(id);
     if (timer) clearTimeout(timer);

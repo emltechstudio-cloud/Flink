@@ -17,7 +17,9 @@ function App() {
   const match = route.match(/^#room\/([^?]+)(?:\?(.*))?$/);
   if (match) {
     const params = new URLSearchParams(match[2] ?? "");
-    return <RoomPage id={decodeURIComponent(match[1]!)} mode={params.get("mode") ?? "video"} title={params.get("title") ?? "Room"} />;
+    let id = match[1]!;
+    try { id = decodeURIComponent(id); } catch { /* malformed percent escapes remain literal */ }
+    return <RoomPage id={id} mode={params.get("mode") ?? "video"} title={params.get("title") ?? "Room"} host={params.get("host") ?? undefined} />;
   }
   return <FlinkShell />;
 }

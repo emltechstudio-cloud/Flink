@@ -46,9 +46,15 @@ export function getIceServers() {
   if (!iceServersPromise) {
     iceServersPromise = (async () => {
       const configured = configuredTurn
-        ? [{ urls: configuredTurn, username: configuredTurnUsername, credential: configuredTurnCredential } satisfies RTCIceServer]
+        ? [{
+            urls: configuredTurn,
+            ...(configuredTurnUsername ? { username: configuredTurnUsername } : {}),
+            ...(configuredTurnCredential ? { credential: configuredTurnCredential } : {}),
+          } satisfies RTCIceServer]
         : [];
-      const publicTurn = configured.length === 0 ? await publicTurnCredentials().catch(() => null) : null;
+      // Include a public relay as a fallback even when a deployment-specific TURN
+      // server is configured; clients on restrictive networks may not reach it.
+      const publicTurn = await publicTurnCredentials().catch(() => null);
       return [...STUN_SERVERS, ...configured, ...(publicTurn ? [publicTurn] : [])];
     })();
   }

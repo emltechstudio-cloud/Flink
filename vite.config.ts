@@ -6,7 +6,7 @@ export default defineConfig({
   root: "frontend",
   base: "./",
   server: {
-    allowedHosts: [".us1.manus.computer", ".us4.manus.computer"],
+    allowedHosts: [".us1.manus.computer", ".us3.manus.computer", ".us4.manus.computer"],
   },
   resolve: {
     alias: { "@": new URL("./frontend/src", import.meta.url).pathname },

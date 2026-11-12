@@ -252,7 +252,11 @@ export function ChatView() {
     const audio = previewAudioRef.current;
     if (!audio) return;
     if (audio.paused) {
-      void audio.play().then(() => setPreviewPlaying(true)).catch(() => setPreviewPlaying(false));
+      setRecordingError(null);
+      void audio.play().then(() => setPreviewPlaying(true)).catch(() => {
+        setPreviewPlaying(false);
+        setRecordingError("This voice note could not be played in this browser. Try another audio file or browser.");
+      });
     } else {
       audio.pause();
       setPreviewPlaying(false);
@@ -276,20 +280,44 @@ export function ChatView() {
       setRecordingError("Choose WebP, GIF, or PNG sticker files.");
       return;
     }
-    const imported = await Promise.all(valid.map(compressSticker));
-    const next = [...imported, ...stickers.filter((item) => !imported.includes(item))].slice(0, 200);
-    setStickers(next);
-    await flinkStorage.setSetting("stickers", next);
-    setStickerTrayOpen(true);
+    setRecordingError(null);
+    try {
+      const outcomes = await Promise.allSettled(valid.map((file) => file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif") ? fileToDataUrl(file) : compressSticker(file)));
+      const imported = outcomes.flatMap((outcome) => outcome.status === "fulfilled" ? [outcome.value] : []);
+      if (imported.length === 0) {
+        setRecordingError("The selected sticker images could not be decoded. Try PNG, GIF, or WebP files.");
+        return;
+      }
+      const next = [...imported, ...stickers.filter((item) => !imported.includes(item))].slice(0, 200);
+      setStickers(next);
+      await flinkStorage.setSetting("stickers", next);
+      setStickerTrayOpen(true);
+      if (imported.length < valid.length) setRecordingError(`${valid.length - imported.length} sticker file(s) could not be imported.`);
+    } catch {
+      setRecordingError("Stickers could not be saved on this device. Please try again.");
+    }
   }
 
   async function sendSavedSticker(dataUrl: string) {
-    const response = await fetch(dataUrl);
-    const blob = await response.blob();
-    const compressed = await compressSticker(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type || "image/webp" }));
-    const compressedBlob = await (await fetch(compressed)).blob();
-    await sendGif(new File([compressedBlob], `sticker-${Date.now()}.webp`, { type: "image/webp" }), replyingTo ?? undefined);
-    setReplyingTo(null);
+    try {
+      const response = await fetch(dataUrl);
+      const blob = await response.blob();
+      if (blob.size > MAX_STICKER_BYTES) {
+        setRecordingError("This sticker is too large to send.");
+        return;
+      }
+      if (blob.type === "image/gif" || dataUrl.startsWith("data:image/gif")) {
+        await sendGif(new File([blob], `sticker-${Date.now()}.gif`, { type: "image/gif" }), replyingTo ?? undefined);
+      } else {
+        const compressed = await compressSticker(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type || "image/webp" }));
+        const compressedBlob = await (await fetch(compressed)).blob();
+        await sendGif(new File([compressedBlob], `sticker-${Date.now()}.webp`, { type: "image/webp" }), replyingTo ?? undefined);
+      }
+      setRecordingError(null);
+      setReplyingTo(null);
+    } catch {
+      setRecordingError("This sticker could not be prepared for sending. Try another image.");
+    }
   }
 
   async function favoriteSticker(dataUrl: string) {
@@ -336,10 +364,10 @@ export function ChatView() {
         {messages.map((m) => <div key={m.id} className={`mb-2 flex ${m.mine ? "justify-end" : "justify-start"}`}>
           <div className={`relative ${m.kind === "voice" ? "w-[min(94%,360px)]" : "max-w-[86%]"} rounded-[9px] px-3 py-2 text-[15px] leading-snug shadow-[0_1px_1px_rgba(0,0,0,0.12)] ${m.mine ? "rounded-br-[2px] bg-[#f2d9e2] text-fg" : "rounded-bl-[2px] bg-white text-fg"}`} onContextMenu={(e) => { e.preventDefault(); setSelectedMessageId(m.id); setEmojiPickerOpen(true); }}>
             {m.replyTo && <div className="mb-2 rounded-lg border-l-2 border-primary bg-primary/5 px-2 py-1 text-xs text-muted"><span className="font-semibold">Replying to {m.replyTo.from}</span><p className="truncate">{m.replyTo.preview}</p></div>}
-            {m.kind === "image" && m.imageUrl && <img src={m.imageUrl} alt="Photo message" className="mb-1 max-h-64 w-full rounded-[7px] object-cover" />}
-            {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls preload="metadata" className="mb-1 min-w-0 w-full accent-primary" onError={(event) => { event.currentTarget.parentElement?.classList.add("media-load-error"); }} />}
+            {m.kind === "image" && m.imageUrl && <img src={m.imageUrl} alt="Photo message" className="mb-1 max-h-64 w-full rounded-[7px] object-cover" onError={(event) => { event.currentTarget.hidden = true; event.currentTarget.parentElement?.classList.add("media-load-error"); }} />}
+            {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls preload="metadata" className="mb-1 min-w-0 w-full accent-primary" onError={() => setRecordingError("A received voice note could not be loaded or played. The file may be unsupported or unavailable from the connection.")} />}
             {m.kind === "video" && m.videoUrl && <video src={m.videoUrl} controls className="mb-1 max-h-64 w-full rounded-[7px]" />}
-            {m.kind === "gif" && m.imageUrl && <><img src={m.imageUrl} alt="Sticker" className="mb-1 max-h-40 max-w-40 rounded-[7px] object-contain" /><button type="button" className="mb-1 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>★ Save sticker</button></>}
+            {m.kind === "gif" && m.imageUrl && <><img src={m.imageUrl} alt="Sticker" className="mb-1 max-h-40 max-w-40 rounded-[7px] object-contain" onError={(event) => { event.currentTarget.hidden = true; setRecordingError("This sticker image could not be displayed. Its data may be incomplete or unsupported."); }} /><button type="button" className="mb-1 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>★ Save sticker</button></>}
             {m.kind === "file" && m.fileUrl && <a href={m.fileUrl} download={m.fileName || "file"} className="mb-1 flex items-center gap-2 rounded-lg bg-primary/10 p-2 text-sm text-primary"><FileText className="size-5 shrink-0" /><span className="max-w-[180px] truncate">{m.fileName || "File"}</span></a>}
             {(m.kind === "text" || m.caption) && <p className={m.kind === "text" ? "" : "mt-1 whitespace-pre-wrap"}>{renderLinkedText(m.kind === "text" ? m.text : m.caption)}</p>}
             {m.reactions && Object.keys(m.reactions).length > 0 && <div className="mt-2 flex flex-wrap gap-1">{Object.entries(m.reactions).map(([emoji, reaction]) => <span key={emoji} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"><span>{emoji}</span><span className="text-subtle">{reaction.count}</span></span>)}</div>}
@@ -354,7 +382,7 @@ export function ChatView() {
       {recordingError && <div className="border-t border-danger/20 bg-danger/5 px-3 py-2 text-center text-xs text-danger" role="status">{recordingError}<button type="button" className="ml-2 font-semibold underline" onClick={() => setRecordingError(null)}>Dismiss</button></div>}
       {voicePreview && <div className="border-t border-border bg-surface px-3 py-2"><audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; setVoicePreview((preview) => preview ? { ...preview, duration } : preview); }} onEnded={() => setPreviewPlaying(false)} className="hidden" /><div className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-[#fff8fa] px-3 py-2.5"><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>{previewPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}</Button><div className="flex min-w-0 flex-1 items-center gap-[3px]">{waveform.map((height, index) => <span key={index} className="w-[3px] shrink-0 rounded-full bg-primary/60" style={{ height }} />)}</div><span className="min-w-[38px] text-right text-xs text-muted">{voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : "Ready"}</span><Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-danger hover:bg-danger/10" onClick={clearVoicePreview} aria-label="Delete voice note"><Trash2 className="size-4" /></Button><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={sendPreview} aria-label="Send voice note"><Send className="size-4" /></Button></div></div>}
 
-      {mediaPreview && <div className="border-t border-border bg-surface px-3 py-3"><div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#fff8fa] p-2"><Button type="button" variant="ghost" size="icon" className="absolute right-2 top-2 z-10 size-8 rounded-full bg-black/55 text-white hover:bg-black/70" onClick={clearMediaPreview} aria-label="Cancel media preview"><X className="size-4" /></Button>{mediaPreview.kind === "image" ? <img src={mediaPreview.url} alt="Photo preview" className="max-h-64 w-full rounded-xl object-cover" /> : <video src={mediaPreview.url} controls className="max-h-64 w-full rounded-xl bg-black" />}<div className="mt-2 flex items-center gap-2"><input value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Add a caption" className="min-h-10 flex-1 rounded-full border border-border bg-white px-4 text-sm text-fg outline-none focus:border-primary" aria-label="Media caption" /><Button type="button" size="icon" className="size-10 shrink-0 rounded-full" onClick={sendMediaPreview} aria-label="Send media"><Send className="size-4" /></Button></div></div></div>}
+      {mediaPreview && <div className="border-t border-border bg-surface px-3 py-3"><div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#fff8fa] p-2"><Button type="button" variant="ghost" size="icon" className="absolute right-2 top-2 z-10 size-8 rounded-full bg-black/55 text-white hover:bg-black/70" onClick={clearMediaPreview} aria-label="Cancel media preview"><X className="size-4" /></Button>{mediaPreview.kind === "image" ? <img src={mediaPreview.url} alt="Photo preview" className="max-h-64 w-full rounded-xl object-cover" onError={() => setRecordingError("This image format could not be previewed in this browser. The original file is still available to send.")} /> : <video src={mediaPreview.url} controls className="max-h-64 w-full rounded-xl bg-black" onError={() => setRecordingError("This video format could not be previewed in this browser. The original file is still available to send.")} />}<div className="mt-2 flex items-center gap-2"><input value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Add a caption" className="min-h-10 flex-1 rounded-full border border-border bg-white px-4 text-sm text-fg outline-none focus:border-primary" aria-label="Media caption" /><Button type="button" size="icon" className="size-10 shrink-0 rounded-full" onClick={sendMediaPreview} aria-label="Send media"><Send className="size-4" /></Button></div></div></div>}
       {stickerTrayOpen && <div className="border-t border-border bg-surface px-3 py-3"><div className="mb-3 flex items-center justify-between"><div><p className="text-sm font-semibold text-fg">Stickers</p><p className="text-[11px] text-subtle">Tap to send · save favorites for quick access</p></div><Button type="button" size="sm" variant="secondary" onClick={() => gifRef.current?.click()}>Import many</Button></div><div className="mb-3 flex gap-1 overflow-x-auto rounded-xl bg-mist p-1"><Button type="button" size="sm" variant={stickerTab === "flink" ? "default" : "ghost"} onClick={() => setStickerTab("flink")}>Flink</Button><Button type="button" size="sm" variant={stickerTab === "saved" ? "default" : "ghost"} onClick={() => setStickerTab("saved")}>Imported {stickers.length ? `(${stickers.length})` : ""}</Button><Button type="button" size="sm" variant={stickerTab === "favorites" ? "default" : "ghost"} onClick={() => setStickerTab("favorites")}>Favorites {favoriteStickers.length ? `(${favoriteStickers.length})` : ""}</Button></div><div className="grid max-h-72 grid-cols-5 gap-2 overflow-y-auto pr-1 sm:grid-cols-6">{(stickerTab === "flink" ? flinkStarterStickers : stickerTab === "favorites" ? favoriteStickers : stickers).map((sticker, index) => <div key={`${sticker.slice(0, 20)}-${index}`} className="relative aspect-square rounded-2xl border border-border bg-mist p-1.5 hover:border-primary"><button type="button" className="size-full" onClick={() => void sendSavedSticker(sticker)}><img src={sticker} alt="Sticker" className="size-full object-contain" /></button>{stickerTab !== "favorites" && <button type="button" className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] text-white" onClick={() => void favoriteSticker(sticker)} aria-label="Save sticker to favorites">★</button>}</div>)}</div></div>}
       {replyingTo && <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-2 text-xs"><Reply className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Replying to {replyingTo.from}: {replyingTo.text || replyingTo.caption || replyingTo.fileName || replyingTo.kind}</span><Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><X className="size-4" /></Button></div>}
       <form className="flex items-end gap-2 border-t border-border bg-[#fff8fa] px-2 py-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } }}>
