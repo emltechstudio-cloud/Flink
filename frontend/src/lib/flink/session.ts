@@ -63,6 +63,7 @@ export class FlinkSession {
     readonly mode: CommMode,
     readonly handlers: SessionHandlers,
     readonly displayName?: string,
+    readonly avatarDataUrl?: string,
   ) {
     this.signaling = new SignalingSocket(sessionId, token, {
       onEvent: (e) => void this.onSignal(e),
@@ -307,11 +308,12 @@ export class FlinkSession {
     channel.onopen = () => {
       this.handlers.onConnected(this.peers.size);
       this.handlers.onStatus("Talking");
-      if (this.displayName) {
+      if (this.displayName || this.avatarDataUrl) {
         channel.send(JSON.stringify({
           v: 1,
           kind: "participant_info",
           displayName: this.displayName,
+          avatarDataUrl: this.avatarDataUrl,
           id: `participant-${Date.now()}`,
           ts: Date.now(),
         }));

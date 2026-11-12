@@ -1046,14 +1046,13 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       return;
     }
   }
-  const session = new FlinkSession(sid, useFlink.getState().profile?.accessToken, mode, {
+  const identity = useFlink.getState().profile;
+  const session = new FlinkSession(sid, identity?.accessToken, mode, {
     onStatus: (text) => useFlink.setState({ callStatus: text }),
     onConnected: async () => {
       stopRingtone();
       void flushChatOutbox();
       if (mode === "voice" || mode === "video") void finishCurrentCall("connected");
-      const identity = useFlink.getState().profile;
-      if (identity?.avatarDataUrl) session.sendChat({ kind: "participant_info", displayName: identity.flinkNumber, avatarDataUrl: identity.avatarDataUrl, id: randomId(8), ts: Date.now() });
       const number = /^\d{6}$/.test(peerLabel) ? peerLabel : undefined;
       if (number) {
         await useFlink.getState().upsertContact(number);
@@ -1246,7 +1245,7 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       toast.message("They declined");
       useFlink.getState().hangup("declined");
     },
-  });
+  }, identity?.flinkNumber, identity?.avatarDataUrl);
   await session.start(stream);
   useFlink.setState({
     session,
@@ -1293,12 +1292,16 @@ if (typeof window !== "undefined") {
   navigator.serviceWorker?.addEventListener("message", (event) => {
     const data = event.data as {
       type?: string;
-      action?: "answer" | "decline";
+      action?: "answer" | "decline" | "open";
       payload?: IncomingRequest & { session_id?: string; from?: string; mode?: CommMode };
     };
     if (data?.type !== "flink-push" && data?.type !== "flink-push-action") return;
     const payload = data.payload;
     if (!payload?.from) return;
+    if (data.action === "open") {
+      useFlink.getState().setView("history");
+      return;
+    }
     if (data.action) stopRingtone();
     useFlink.setState({
       incoming: {

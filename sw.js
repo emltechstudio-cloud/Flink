@@ -59,7 +59,7 @@ self.addEventListener("push", (event) => {
     icon: new URL("./icon.svg", scopeUrl).toString(),
     badge: new URL("./icon.svg", scopeUrl).toString(),
     data,
-    tag: data.session_id || "flink",
+    tag: data.session_id || `flink-${data.type || "message"}-${data.from || "unknown"}-${data.message_id || Date.now()}`,
     requireInteraction: true,
     vibrate: [250, 100, 250, 100, 500],
     actions: isCall ? [
@@ -84,7 +84,7 @@ self.addEventListener("notificationclick", (event) => {
     clearInterval(callTimers.get(payload.session_id));
     callTimers.delete(payload.session_id);
   }
-  const action = event.action || "answer";
+  const action = event.action || (payload.mode === "voice" || payload.mode === "video" ? "answer" : "open");
   event.waitUntil((async () => {
     const windows = await self.clients.matchAll({ type: "window", includeUncontrolled: true });
     for (const client of windows) {
