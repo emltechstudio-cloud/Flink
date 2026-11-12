@@ -31,6 +31,8 @@ export type ChatData = {
   sessionActive?: boolean;
   inCall?: boolean;
   displayName?: string;
+  replyTo?: { id: string; from: string; preview: string };
+  avatarDataUrl?: string;
 };
 
 export type SessionHandlers = {

@@ -7,6 +7,7 @@ export type FlinkProfile = {
   accessToken: string;
   password?: string;
   createdAt: number;
+  avatarDataUrl?: string;
 };
 
 export type FlinkSimFile = {
@@ -52,6 +53,7 @@ export type ChatMessage = {
   status?: "pending" | "sent" | "delivered" | "read";
   duration?: number;
   reactions?: Record<string, Reaction>;
+  replyTo?: { id: string; from: string; preview: string };
 };
 
 export type Thread = {

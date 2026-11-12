@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Send, Smile, Trash2, UserPlus, Video, X } from "lucide-react";
+import { ArrowLeft, FileText, Film, Mic, Paperclip, Pause, Phone, Play, RefreshCw, Reply, Send, Smile, Trash2, UserPlus, Video, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { NumberAvatar } from "./mark";
 import { useFlink } from "@/lib/flink/store";
 import { formatFlinkNumber, formatTime } from "@/lib/utils";
+import type { ChatMessage } from "@/lib/flink/types";
 
 type VoicePreview = { file: File; url: string; duration: number };
 type MediaPreview = { file: File; url: string; kind: "image" | "video" };
@@ -28,6 +29,7 @@ export function ChatView() {
   const [emojiComposerOpen, setEmojiComposerOpen] = useState(false);
   const [contactEditorOpen, setContactEditorOpen] = useState(false);
   const [contactNameDraft, setContactNameDraft] = useState("");
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const voiceRef = useRef<HTMLInputElement>(null);
@@ -76,9 +78,9 @@ export function ChatView() {
   }
 
   function prepareMedia(file: File, kind: "image" | "video") {
-    const limit = kind === "image" ? 180_000 : 50_000_000;
+    const limit = kind === "image" ? 20_000_000 : 60_000_000;
     if (file.size > limit) {
-      setRecordingError(kind === "image" ? "Keep photos under 180 KB for peer transfer." : "Keep videos under 50 MB.");
+      setRecordingError(kind === "image" ? "Keep photos under 20 MB." : "Keep videos under 60 MB.");
       return;
     }
     const url = URL.createObjectURL(file);
@@ -212,8 +214,9 @@ export function ChatView() {
 
   function sendPreview() {
     if (!voicePreview) return;
-    void sendVoiceNote(voicePreview.file);
+    void sendVoiceNote(voicePreview.file, replyingTo ?? undefined);
     clearVoicePreview();
+    setReplyingTo(null);
   }
 
   if (!activeThread) return <div className="flex flex-1 items-center justify-center text-sm text-muted">Select a conversation</div>;
@@ -252,6 +255,7 @@ export function ChatView() {
         {messages.length === 0 && <div className="mx-auto mt-8 max-w-[280px] rounded-lg bg-[#fff5c4] px-4 py-2.5 text-center text-xs leading-relaxed text-[#6b5c32] shadow-sm">Messages stay on this device. They travel peer to peer once you are connected.</div>}
         {messages.map((m) => <div key={m.id} className={`mb-2 flex ${m.mine ? "justify-end" : "justify-start"}`}>
           <div className={`relative ${m.kind === "voice" ? "w-[min(94%,360px)]" : "max-w-[86%]"} rounded-[9px] px-3 py-2 text-[15px] leading-snug shadow-[0_1px_1px_rgba(0,0,0,0.12)] ${m.mine ? "rounded-br-[2px] bg-[#f2d9e2] text-fg" : "rounded-bl-[2px] bg-white text-fg"}`} onContextMenu={(e) => { e.preventDefault(); setSelectedMessageId(m.id); setEmojiPickerOpen(true); }}>
+            {m.replyTo && <div className="mb-2 rounded-lg border-l-2 border-primary bg-primary/5 px-2 py-1 text-xs text-muted"><span className="font-semibold">Replying to {m.replyTo.from}</span><p className="truncate">{m.replyTo.preview}</p></div>}
             {m.kind === "image" && m.imageUrl && <img src={m.imageUrl} alt="Photo message" className="mb-1 max-h-64 w-full rounded-[7px] object-cover" />}
             {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls className="mb-1 min-w-0 w-full accent-primary" />}
             {m.kind === "video" && m.videoUrl && <video src={m.videoUrl} controls className="mb-1 max-h-64 w-full rounded-[7px]" />}
@@ -259,7 +263,7 @@ export function ChatView() {
             {m.kind === "file" && m.fileUrl && <a href={m.fileUrl} download={m.fileName || "file"} className="mb-1 flex items-center gap-2 rounded-lg bg-primary/10 p-2 text-sm text-primary"><FileText className="size-5 shrink-0" /><span className="max-w-[180px] truncate">{m.fileName || "File"}</span></a>}
             {(m.kind === "text" || m.caption) && <p className={m.kind === "text" ? "" : "mt-1 whitespace-pre-wrap"}>{renderLinkedText(m.kind === "text" ? m.text : m.caption)}</p>}
             {m.reactions && Object.keys(m.reactions).length > 0 && <div className="mt-2 flex flex-wrap gap-1">{Object.entries(m.reactions).map(([emoji, reaction]) => <span key={emoji} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"><span>{emoji}</span><span className="text-subtle">{reaction.count}</span></span>)}</div>}
-            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.mine ? "text-primary/70" : "text-muted"}`}><span>{formatTime(m.ts)}</span><span>{m.mine && m.status === "pending" && "Waiting"}{m.mine && m.status === "sent" && "✓"}{m.mine && m.status === "delivered" && "✓✓"}{m.mine && m.status === "read" && <span className="text-primary-2">✓✓</span>}</span></div>
+            <div className={`mt-1 flex items-center justify-end gap-1 text-[10px] ${m.mine ? "text-primary/70" : "text-muted"}`}><button type="button" className="mr-auto inline-flex items-center gap-1 text-primary hover:underline" onClick={() => setReplyingTo(m)}><Reply className="size-3" />Reply</button><span>{formatTime(m.ts)}</span><span>{m.mine && m.status === "pending" && "Waiting"}{m.mine && m.status === "sent" && "✓"}{m.mine && m.status === "delivered" && "✓✓"}{m.mine && m.status === "read" && <span className="text-primary-2">✓✓</span>}</span></div>
           </div>
         </div>)}
         <div ref={bottom} />
@@ -271,14 +275,15 @@ export function ChatView() {
       {voicePreview && <div className="border-t border-border bg-surface px-3 py-2"><audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; setVoicePreview((preview) => preview ? { ...preview, duration } : preview); }} onEnded={() => setPreviewPlaying(false)} className="hidden" /><div className="flex w-full items-center gap-3 rounded-xl border border-primary/20 bg-[#fff8fa] px-3 py-2.5"><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>{previewPlaying ? <Pause className="size-4" /> : <Play className="ml-0.5 size-4" />}</Button><div className="flex min-w-0 flex-1 items-center gap-[3px]">{waveform.map((height, index) => <span key={index} className="w-[3px] shrink-0 rounded-full bg-primary/60" style={{ height }} />)}</div><span className="min-w-[38px] text-right text-xs text-muted">{voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : "Ready"}</span><Button type="button" variant="ghost" size="icon" className="size-9 shrink-0 text-danger hover:bg-danger/10" onClick={clearVoicePreview} aria-label="Delete voice note"><Trash2 className="size-4" /></Button><Button type="button" size="icon" className="size-11 shrink-0 rounded-full" onClick={sendPreview} aria-label="Send voice note"><Send className="size-4" /></Button></div></div>}
 
       {mediaPreview && <div className="border-t border-border bg-surface px-3 py-3"><div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-[#fff8fa] p-2"><Button type="button" variant="ghost" size="icon" className="absolute right-2 top-2 z-10 size-8 rounded-full bg-black/55 text-white hover:bg-black/70" onClick={clearMediaPreview} aria-label="Cancel media preview"><X className="size-4" /></Button>{mediaPreview.kind === "image" ? <img src={mediaPreview.url} alt="Photo preview" className="max-h-64 w-full rounded-xl object-cover" /> : <video src={mediaPreview.url} controls className="max-h-64 w-full rounded-xl bg-black" />}<div className="mt-2 flex items-center gap-2"><input value={mediaCaption} onChange={(e) => setMediaCaption(e.target.value)} placeholder="Add a caption" className="min-h-10 flex-1 rounded-full border border-border bg-white px-4 text-sm text-fg outline-none focus:border-primary" aria-label="Media caption" /><Button type="button" size="icon" className="size-10 shrink-0 rounded-full" onClick={sendMediaPreview} aria-label="Send media"><Send className="size-4" /></Button></div></div></div>}
-      <form className="flex items-end gap-2 border-t border-border bg-[#fff8fa] px-2 py-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { void sendText(draft); setDraft(""); } }}>
-        <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "image"); e.target.value = ""; }} />
+      {replyingTo && <div className="flex items-center gap-2 border-t border-border bg-primary/5 px-3 py-2 text-xs"><Reply className="size-4 text-primary" /><span className="min-w-0 flex-1 truncate">Replying to {replyingTo.from}: {replyingTo.text || replyingTo.caption || replyingTo.fileName || replyingTo.kind}</span><Button type="button" variant="ghost" size="icon" className="size-7" onClick={() => setReplyingTo(null)} aria-label="Cancel reply"><X className="size-4" /></Button></div>}
+      <form className="flex items-end gap-2 border-t border-border bg-[#fff8fa] px-2 py-2" onSubmit={(e) => { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } }}>
+        <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "image"); e.target.value = ""; }} />
         <input ref={voiceRef} type="file" accept="audio/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareVoice(f); e.target.value = ""; }} />
         <input ref={videoRef} type="file" accept="video/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "video"); e.target.value = ""; }} />
-        <input ref={gifRef} type="file" accept="image/gif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendGif(f); e.target.value = ""; }} />
+        <input ref={gifRef} type="file" accept="image/gif,image/webp,image/png" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendGif(f, replyingTo ?? undefined); e.target.value = ""; }} />
         <input ref={fileUploadRef} type="file" accept="*/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); e.target.value = ""; }} />
         <div className="relative flex items-center gap-1"><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach photo, video, or file"><Paperclip className="size-5" /></Button><Button type="button" variant="ghost" size="icon" className="size-10 rounded-full text-primary hover:bg-primary/10" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji"><Smile className="size-5" /></Button><Button type="button" variant="ghost" size="sm" className="h-9 rounded-full px-2 font-bold text-[11px] text-primary hover:bg-primary/10" onClick={() => gifRef.current?.click()} aria-label="Send GIF">GIF</Button>{fileMenuOpen && <div className="absolute bottom-12 left-0 z-10 min-w-[150px] rounded-[16px] border border-border bg-surface p-2 shadow-lg"><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />Photo</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}><Film className="size-4 text-primary" />Video</button><button type="button" className="flex w-full items-center gap-2 rounded-[12px] px-3 py-2 text-left text-sm hover:bg-mist" onClick={() => { fileUploadRef.current?.click(); setFileMenuOpen(false); }}><FileText className="size-4 text-primary" />File</button></div>}{emojiComposerOpen && <div className="absolute bottom-12 left-10 z-10 grid w-64 grid-cols-8 gap-1 rounded-2xl border border-border bg-surface p-3 shadow-lg">{["😀", "😂", "😍", "🥹", "😎", "😢", "😡", "👍", "👎", "👏", "🙏", "🔥", "🎉", "❤️", "✨", "🚀", "💬", "🤝", "✅", "❌", "🙌", "💯", "🤣", "😘"].map((emoji) => <button key={emoji} type="button" className="rounded-lg p-1 text-xl hover:bg-mist" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>{emoji}</button>)}</div>}</div>
-        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder={recordingVoice ? `Recording… ${recordingSeconds}s` : "Type a message"} className="max-h-28 min-h-10 flex-1 resize-none rounded-[22px] border border-border bg-white px-4 py-2.5 text-[15px] text-fg outline-none placeholder:text-muted focus:border-primary" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (draft.trim()) { void sendText(draft); setDraft(""); } } }} />
+        <textarea value={draft} onChange={(e) => setDraft(e.target.value)} rows={1} placeholder={recordingVoice ? `Recording… ${recordingSeconds}s` : "Type a message"} className="max-h-28 min-h-10 flex-1 resize-none rounded-[22px] border border-border bg-white px-4 py-2.5 text-[15px] text-fg outline-none placeholder:text-muted focus:border-primary" onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (draft.trim()) { void sendText(draft, replyingTo ?? undefined); setDraft(""); setReplyingTo(null); } } }} />
         {!draft.trim() && <Button type="button" variant="ghost" size="icon" className={`size-10 rounded-full ${recordingVoice ? "bg-danger text-white hover:bg-danger/90" : "text-primary hover:bg-primary/10"}`} onClick={() => void toggleVoiceRecording()} aria-label={recordingVoice ? "Stop recording" : "Record voice note"}>{recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}</Button>}
         {draft.trim() && <Button type="submit" size="icon" className="size-10 rounded-full" aria-label="Send message"><Send className="size-4" /></Button>}
       </form>
@@ -291,5 +296,12 @@ export function ChatView() {
 function renderLinkedText(value?: string) {
   if (!value) return null;
   const parts = value.split(/(https?:\/\/[^\s]+)/g);
-  return parts.map((part, index) => /^https?:\/\//.test(part) ? <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="break-all text-primary underline">{part}</a> : <span key={`${part}-${index}`}>{part}</span>);
+  return parts.map((part, index) => {
+    if (!/^https?:\/\//.test(part)) return <span key={`${part}-${index}`}>{part}</span>;
+    let host = part;
+    try { host = new URL(part).hostname.replace(/^www\./, ""); } catch { /* keep raw URL */ }
+    return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="my-1 flex items-center gap-2 rounded-xl border border-primary/15 bg-primary/5 px-3 py-2 text-primary no-underline"><span className="flex size-7 items-center justify-center rounded-lg bg-primary/10"><LinkIcon /></span><span className="min-w-0"><span className="block text-xs font-semibold">{host}</span><span className="block max-w-[220px] truncate text-[11px] opacity-70">Open shared link</span></span></a>;
+  });
 }
+
+function LinkIcon() { return <span className="text-xs">↗</span>; }

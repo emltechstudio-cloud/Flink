@@ -131,7 +131,7 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
       <div className="w-full max-w-sm rounded-[28px] border border-border bg-surface p-6 shadow-soft">
         <div className="mb-4 flex items-center gap-2 text-primary"><FlinkMark size={22} /><span className="font-display text-xl">Flink room</span></div>
         <h1 className="font-display text-2xl font-medium">{title}</h1>
-        <p className="mt-1 mb-5 text-sm text-muted">{mode} room. Guests can join without a Flink number.</p>
+        <p className="mt-1 mb-5 text-sm text-muted">A private shared space for a quick conversation. Guests can join without a Flink number.</p>
         <Label htmlFor="guest">Name in this room</Label>
         <Input id="guest" value={name} onChange={(event) => setName(event.target.value)} className="mb-4" />
         <Button className="w-full" onClick={() => void join()} disabled={boot === 'loading'}>{boot === 'loading' ? 'Opening room…' : 'Join room'}</Button>
@@ -143,8 +143,8 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
 
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
-      <header className="flex items-center justify-between border-b border-border px-4 py-3">
-        <div><p className="font-semibold">{title}</p><p className="text-xs text-muted">{status}</p></div>
+      <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
+        <div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-fg"><FlinkMark size={21} /></div><div><p className="font-semibold">{title}</p><p className="text-xs text-muted">{status} · Flink room</p></div></div>
         <Button variant="danger" size="sm" onClick={() => { sessionRef.current?.close(); window.location.hash = ''; }}>Leave</Button>
       </header>
       {mode !== 'chat' && <div className="relative min-h-[240px] flex-1 bg-call">

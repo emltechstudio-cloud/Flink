@@ -85,11 +85,11 @@ type FlinkState = {
   cancelOutgoing: () => void;
   openThread: (thread: Thread) => Promise<void>;
   startChat: (number: string) => Promise<void>;
-  sendText: (text: string) => Promise<void>;
-  sendImage: (file: File, caption?: string) => Promise<void>;
-  sendVoiceNote: (file: File) => Promise<void>;
-  sendVideo: (file: File, caption?: string) => Promise<void>;
-  sendGif: (file: File) => Promise<void>;
+  sendText: (text: string, replyTo?: ChatMessage) => Promise<void>;
+  sendImage: (file: File, caption?: string, replyTo?: ChatMessage) => Promise<void>;
+  sendVoiceNote: (file: File, replyTo?: ChatMessage) => Promise<void>;
+  sendVideo: (file: File, caption?: string, replyTo?: ChatMessage) => Promise<void>;
+  sendGif: (file: File, replyTo?: ChatMessage) => Promise<void>;
   sendFile: (file: File) => Promise<void>;
   addReaction: (messageId: string, emoji: string) => Promise<void>;
   deleteMessage: (messageId: string) => Promise<void>;
@@ -105,6 +105,7 @@ type FlinkState = {
   toggleVideo: () => void;
   startRoom: (mode: CommMode, title: string) => { id: string; url: string };
   upsertContact: (number: string, name?: string) => Promise<void>;
+  updateAvatar: (avatarDataUrl?: string) => Promise<void>;
 };
 
 function deviceId() {
@@ -603,7 +604,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
     await get().approach(number, "chat");
   },
 
-  async sendText(text) {
+  async sendText(text, replyTo) {
     const trimmed = text.trim();
     if (!trimmed) return;
     const thread = get().activeThread;
@@ -615,6 +616,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       from: profile.flinkNumber,
       kind: "text",
       text: trimmed,
+      replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
       ts: Date.now(),
       mine: true,
       status: "sent",
@@ -627,12 +629,12 @@ export const useFlink = create<FlinkState>((set, get) => ({
       threads: [next, ...get().threads.filter((t) => t.id !== next.id)],
       activeThread: next,
     });
-    await deliverChat(thread.id, { kind: "text", text: trimmed, id: msg.id, ts: msg.ts });
+    await deliverChat(thread.id, { kind: "text", text: trimmed, id: msg.id, ts: msg.ts, replyTo: msg.replyTo });
   },
 
-  async sendImage(file, caption = "") {
-    if (file.size > 180_000) {
-      toast.error("Keep images under 180 KB for peer transfer");
+  async sendImage(file, caption = "", replyTo) {
+    if (file.size > 20_000_000) {
+      toast.error("Keep photos under 20 MB");
       return;
     }
     const thread = get().activeThread;
@@ -645,6 +647,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       from: profile.flinkNumber,
       kind: "image",
       caption: caption.trim() || undefined,
+      replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
       imageUrl: dataUrl,
       ts: Date.now(),
       mine: true,
@@ -658,7 +661,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       threads: [next, ...get().threads.filter((t) => t.id !== next.id)],
       activeThread: next,
     });
-    await deliverChat(thread.id, { kind: "image", image: dataUrl, caption: msg.caption, id: msg.id, ts: msg.ts });
+    await deliverChat(thread.id, { kind: "image", image: dataUrl, caption: msg.caption, id: msg.id, ts: msg.ts , replyTo: msg.replyTo });
   },
 
   hangup(status: CallLog["status"] = "ended") {
@@ -719,9 +722,9 @@ export const useFlink = create<FlinkState>((set, get) => ({
     if (msgIndex !== -1) set((s) => ({ messages: s.messages.map((m) => m.id === messageId ? { ...m, status: "read" as const } : m) }));
   },
 
-  async sendVoiceNote(file: File) {
-    if (file.size > 5_000_000) {
-      toast.error("Keep voice notes under 5 MB");
+  async sendVoiceNote(file: File, replyTo) {
+    if (file.size > 20_000_000) {
+      toast.error("Keep voice notes under 20 MB");
       return;
     }
     const thread = get().activeThread;
@@ -739,6 +742,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       mine: true,
       status: "sent" as const,
       duration: Math.round(file.size / 1000),
+      replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
     };
     await flinkStorage.putMessage(msg);
     const next = { ...thread, lastText: "Voice note", lastTs: msg.ts };
@@ -748,12 +752,12 @@ export const useFlink = create<FlinkState>((set, get) => ({
       threads: [next, ...get().threads.filter((t) => t.id !== next.id)],
       activeThread: next,
     });
-    await deliverChat(thread.id, { kind: "voice", audio: dataUrl, id: msg.id, ts: msg.ts, duration: msg.duration });
+    await deliverChat(thread.id, { kind: "voice", audio: dataUrl, id: msg.id, ts: msg.ts, duration: msg.duration , replyTo: msg.replyTo });
   },
 
-  async sendVideo(file, caption = "") {
-    if (file.size > 50_000_000) {
-      toast.error("Keep videos under 50 MB");
+  async sendVideo(file, caption = "", replyTo) {
+    if (file.size > 60_000_000) {
+      toast.error("Keep videos under 60 MB");
       return;
     }
     const thread = get().activeThread;
@@ -766,6 +770,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       from: profile.flinkNumber,
       kind: "video",
       caption: caption.trim() || undefined,
+      replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
       videoUrl: dataUrl,
       ts: Date.now(),
       mine: true,
@@ -780,12 +785,12 @@ export const useFlink = create<FlinkState>((set, get) => ({
       threads: [next, ...get().threads.filter((t) => t.id !== next.id)],
       activeThread: next,
     });
-    await deliverChat(thread.id, { kind: "video", video: dataUrl, caption: msg.caption, id: msg.id, ts: msg.ts, duration: msg.duration });
+    await deliverChat(thread.id, { kind: "video", video: dataUrl, caption: msg.caption, id: msg.id, ts: msg.ts, duration: msg.duration , replyTo: msg.replyTo });
   },
 
-  async sendGif(file: File) {
-    if (file.size > 5_000_000) {
-      toast.error("Keep GIFs under 5 MB");
+  async sendGif(file: File, replyTo) {
+    if (file.size > 20_000_000) {
+      toast.error("Keep stickers under 20 MB");
       return;
     }
     const thread = get().activeThread;
@@ -798,6 +803,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       from: profile.flinkNumber,
       kind: "gif",
       imageUrl: dataUrl,
+      replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
       ts: Date.now(),
       mine: true,
       status: "sent" as const,
@@ -810,12 +816,12 @@ export const useFlink = create<FlinkState>((set, get) => ({
       threads: [next, ...get().threads.filter((t) => t.id !== next.id)],
       activeThread: next,
     });
-    await deliverChat(thread.id, { kind: "gif", image: dataUrl, id: msg.id, ts: msg.ts });
+    await deliverChat(thread.id, { kind: "gif", image: dataUrl, id: msg.id, ts: msg.ts , replyTo: msg.replyTo });
   },
 
   async sendFile(file: File) {
-    if (file.size > 5_000_000) {
-      toast.error("Keep files under 5 MB for peer transfer");
+    if (file.size > 20_000_000) {
+      toast.error("Keep files under 20 MB for peer transfer");
       return;
     }
     const thread = get().activeThread;
@@ -938,6 +944,14 @@ export const useFlink = create<FlinkState>((set, get) => ({
     };
     await flinkStorage.putContact(contact);
     set({ contacts: [contact, ...get().contacts.filter((c) => c.flinkNumber !== number)] });
+  },
+
+  async updateAvatar(avatarDataUrl) {
+    const profile = get().profile;
+    if (!profile) return;
+    const updated = { ...profile, avatarDataUrl };
+    await flinkStorage.saveProfile(updated);
+    set({ profile: updated });
   },
 }));
 
@@ -1109,6 +1123,7 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
         mine: false,
         status: "delivered" as const,
         duration: data.duration,
+        replyTo: data.replyTo,
       };
       const existingMessages = await flinkStorage.getMessages(tid);
       if (existingMessages.some((message) => message.id === msg.id)) return;

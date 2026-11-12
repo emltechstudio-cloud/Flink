@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Bell, Download, LogOut, Plus, Smartphone, UserRound, Volume2, VolumeX } from "lucide-react";
+import { Bell, Download, ImagePlus, LogOut, Plus, Smartphone, UserRound, Volume2, VolumeX } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { FlinkMark } from "./mark";
@@ -10,7 +10,7 @@ import { registerFlinkPush } from "@/lib/flink/push";
 import { isRingtoneEnabled, setRingtoneEnabled } from "@/lib/flink/ringtone";
 
 export function YouView() {
-  const { profile, contacts, peerStatuses, downloadSim, logout, upsertContact } = useFlink();
+  const { profile, contacts, peerStatuses, downloadSim, logout, upsertContact, updateAvatar } = useFlink();
   const [contactName, setContactName] = useState("");
   const [contactNumber, setContactNumber] = useState("");
   const [ringtoneEnabled, setRingtoneEnabledState] = useState(() => isRingtoneEnabled());
@@ -32,6 +32,12 @@ export function YouView() {
     setContactNumber("");
     toast.success("Contact saved");
   }
+  async function chooseAvatar(file?: File) {
+    if (!file) return;
+    const data = await compressAvatar(file);
+    await updateAvatar(data);
+    toast.success("Avatar updated on this device");
+  }
   return (
     <div className="min-h-0 flex-1 overflow-y-auto px-5 py-6">
       <div className="flex flex-col items-center text-center">
@@ -47,6 +53,8 @@ export function YouView() {
         </p>
       </div>
       <section className="mt-8 rounded-[22px] border border-border bg-surface p-4">
+        <div className="mb-4 flex items-center gap-3"><div className="flex size-16 items-center justify-center overflow-hidden rounded-[20px] bg-primary/10 text-primary">{profile.avatarDataUrl ? <img src={profile.avatarDataUrl} alt="Your avatar" className="size-full object-cover" /> : <UserRound className="size-7" />}</div><div className="min-w-0 flex-1"><p className="font-semibold">Your avatar</p><p className="text-xs text-muted">Compressed locally for privacy. No original photo is uploaded.</p></div><label className="inline-flex cursor-pointer items-center gap-1 rounded-xl bg-primary px-3 py-2 text-xs font-semibold text-primary-fg"><ImagePlus className="size-4" />Choose<input type="file" accept="image/*" className="hidden" onChange={(event) => { void chooseAvatar(event.target.files?.[0]); event.target.value = ""; }} /></label></div>
+        {profile.avatarDataUrl && <Button type="button" variant="ghost" size="sm" className="mb-3 text-danger" onClick={() => void updateAvatar(undefined)}>Remove avatar</Button>}
         <div className="mb-3 flex items-center gap-2"><UserRound className="size-4 text-primary" /><h2 className="font-semibold">Contacts</h2></div>
         <div className="space-y-2">
           <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Name" className="min-h-10 w-full rounded-xl border border-border bg-white px-3 text-sm outline-none focus:border-primary" />
@@ -98,4 +106,23 @@ export function YouView() {
       </p>
     </div>
   );
+}
+
+function compressAvatar(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const image = new Image();
+    const url = URL.createObjectURL(file);
+    image.onload = () => {
+      const size = Math.min(image.naturalWidth, image.naturalHeight);
+      const sx = (image.naturalWidth - size) / 2;
+      const sy = (image.naturalHeight - size) / 2;
+      const canvas = document.createElement("canvas");
+      canvas.width = 256; canvas.height = 256;
+      canvas.getContext("2d")?.drawImage(image, sx, sy, size, size, 0, 0, 256, 256);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL("image/webp", 0.82));
+    };
+    image.onerror = () => { URL.revokeObjectURL(url); reject(new Error("Could not read avatar")); };
+    image.src = url;
+  });
 }
