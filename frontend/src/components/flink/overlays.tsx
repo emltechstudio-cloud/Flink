@@ -50,6 +50,7 @@ export function CallOverlay() {
   const [minimized, setMinimized] = useState(false);
   const [audioOutputs, setAudioOutputs] = useState<Array<{ deviceId: string; label: string }>>([]);
   const [audioOutputId, setAudioOutputId] = useState("default");
+  const [speakerOn, setSpeakerOn] = useState(false);
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
   const screenRef = useRef<HTMLVideoElement>(null);
@@ -139,6 +140,16 @@ export function CallOverlay() {
               <span className="block text-xs text-muted">{callStatus || "Call active"}{callConnectedAt ? ` · ${formatDuration(elapsed)}` : ""}</span>
             </span>
           </button>
+          {audioRouteSupported && (
+            <Button size="icon" variant="ghost" className={speakerOn ? "text-primary" : ""} onClick={() => {
+              const newSpeakerOn = !speakerOn;
+              setSpeakerOn(newSpeakerOn);
+              const deviceId = newSpeakerOn ? audioOutputs.find(d => d.label.toLowerCase().includes("speaker"))?.deviceId : "default";
+              if (deviceId) setAudioOutputId(deviceId);
+            }} aria-label={speakerOn ? "Use earpiece" : "Use speaker"}>
+              {speakerOn ? <Monitor className="size-4" /> : <AudioLines className="size-4" />}
+            </Button>
+          )}
           <Button size="icon" variant="ghost" onClick={() => setMinimized(false)} aria-label="Expand call"><Maximize2 className="size-4" /></Button>
           <Button size="icon" variant="danger" onClick={endCall} aria-label="End call"><PhoneOff className="size-4" /></Button>
         </div>
@@ -234,6 +245,22 @@ export function CallOverlay() {
         >
           {isScreenSharing ? <MonitorOff className="size-5" /> : <Monitor className="size-5" />}
         </Button>
+        {audioRouteSupported && (
+          <Button
+            size="round"
+            variant="secondary"
+            className={speakerOn ? "bg-primary text-primary-fg" : "bg-call-fg/10 text-call-fg border-0"}
+            onClick={() => {
+              const newSpeakerOn = !speakerOn;
+              setSpeakerOn(newSpeakerOn);
+              const deviceId = newSpeakerOn ? audioOutputs.find(d => d.label.toLowerCase().includes("speaker"))?.deviceId : "default";
+              if (deviceId) setAudioOutputId(deviceId);
+            }}
+            aria-label={speakerOn ? "Use earpiece" : "Use speaker"}
+          >
+            {speakerOn ? <Monitor className="size-5" /> : <AudioLines className="size-5" />}
+          </Button>
+        )}
         <Button size="round" variant="danger" onClick={endCall} aria-label="End">
           <PhoneOff className="size-5" />
         </Button>

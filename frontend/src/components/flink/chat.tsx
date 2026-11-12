@@ -344,8 +344,8 @@ export function ChatView() {
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f8eef2]">
-      {/* Compact Header - WhatsApp Style */}
-      <header className="relative flex items-center gap-3 bg-[#7b1535] px-3 py-2.5 text-white shadow-lg">
+      {/* Compact Header - WhatsApp Style - Sticky */}
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-[#7b1535] px-3 py-2.5 text-white shadow-lg"
         <Button variant="ghost" size="icon" className="size-9 hover:bg-white/15" onClick={() => setView("history")} aria-label="Back">
           <ArrowLeft className="size-5" />
         </Button>
