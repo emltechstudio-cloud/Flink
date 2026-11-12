@@ -220,6 +220,11 @@ export class FlinkSession {
       this.handlers.onDeclined?.();
       return;
     }
+    // Handle offline chat messages sent via mailbox
+    if (event.type === "chat" && event.from) {
+      this.handlers.onChat(event.from, event.payload as ChatData);
+      return;
+    }
     if (!event.from) return;
     const slot = await this.ensurePeer(event.from);
     if (event.type === "offer") {

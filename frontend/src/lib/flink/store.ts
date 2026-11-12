@@ -161,6 +161,24 @@ async function deliverChat(threadId: string, payload: Parameters<FlinkSession["s
   }
   const sent = state.session?.sendChat(payloadWithAvatar) ?? false;
   if (sent) return true;
+  
+  // If no session is available, try to send via mailbox for offline delivery
+  if (!state.session && /^\d{6}$/.test(peer) && profile) {
+    try {
+      await dropMailbox(peer, {
+        type: "chat",
+        ...payloadWithAvatar,
+      }, profile.accessToken);
+      await flinkStorage.updateMessageStatus(payload.id, "sent");
+      useFlink.setState((state) => ({
+        messages: state.messages.map((message) => message.id === payload.id ? { ...message, status: "sent" as const } : message),
+      }));
+      return true;
+    } catch {
+      // If mailbox delivery fails, fall back to outbox
+    }
+  }
+  
   await flinkStorage.putOutbox({
     id: payload.id,
     threadId,
