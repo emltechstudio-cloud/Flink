@@ -14,7 +14,7 @@ const MAX_VOICE_BYTES = 20_000_000;
 const MAX_STICKER_BYTES = 2_000_000;
 const MAX_STICKER_DIMENSION = 256;
 const waveform = [4, 8, 13, 9, 16, 11, 19, 12, 7, 15, 10, 18, 8, 14, 6, 11, 17, 9, 13, 5, 10, 15, 8, 12];
-const flinkStarterStickers = ["\u2726", "\u2665", "\u2605", "\u263a", "\u2600", "\u26a1", "\u2713", "\u2192"].map((mark, index) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="${["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]}"/><text x="64" y="82" text-anchor="middle" font-size="68" fill="white">${mark}</text></svg>`)}`);
+const flinkStarterStickers = ["\u2726", "\u2665", "\u2605", "\u263a", "\u2600", "\u26a1", "\u2713", "\u2192"].map((mark, index) => `data:image/svg+xml,\( {encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill=" \){["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]}"/><text x="64" y="82" text-anchor="middle" font-size="68" fill="white">${mark}</text></svg>`)}`);
 
 export function ChatView() {
   const {
@@ -223,7 +223,7 @@ export function ChatView() {
           if (blob.size > 0) {
             const type = blob.type || "audio/webm";
             const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
-            prepareVoice(new File([blob], `voice-${Date.now()}.${extension}`, { type }));
+            prepareVoice(new File([blob], `voice-\( {Date.now()}. \){extension}`, { type }));
           }
           else setRecordingError("No audio was captured. Please try recording again.");
         } catch {
@@ -345,7 +345,7 @@ export function ChatView() {
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f8eef2]">
       {/* Compact Header - WhatsApp Style - Sticky */}
-      <header className="sticky top-0 z-10 flex items-center gap-3 bg-[#7b1535] px-3 py-2.5 text-white shadow-lg"
+      <header className="sticky top-0 z-10 flex items-center gap-3 bg-[#7b1535] px-3 py-2.5 text-white shadow-lg">
         <Button variant="ghost" size="icon" className="size-9 hover:bg-white/15" onClick={() => setView("history")} aria-label="Back">
           <ArrowLeft className="size-5" />
         </Button>
@@ -402,15 +402,15 @@ export function ChatView() {
             <p className="mt-1">They travel peer to peer once connected.</p>
           </div>
         )}
-        
+
         {messages.map((m) => (
           <div key={m.id} className={`mb-3 flex ${m.mine ? "justify-end" : "justify-start"}`}>
             <div className={`relative max-w-[88%] ${m.kind === "voice" ? "w-[min(92%,360px)]" : ""}`}>
                       {/* Compact WhatsApp-style Message Bubble */}
-              <div 
+              <div
                 className={`relative rounded-[16px] px-3 py-2 text-[14px] leading-snug shadow-sm ${
-                  m.mine 
-                    ? "rounded-br-[2px] bg-[#e8c9d4] text-fg" 
+                  m.mine
+                    ? "rounded-br-[2px] bg-[#e8c9d4] text-fg"
                     : "rounded-bl-[2px] bg-white text-fg border border-border/20"
                 }`}
                 onContextMenu={(e) => { e.preventDefault(); setSelectedMessageId(m.id); setEmojiPickerOpen(true); }}
@@ -418,7 +418,7 @@ export function ChatView() {
                 {/* Compact Tail for message bubbles */}
                 {!m.mine && <div className="absolute -left-1.5 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[8px] border-r-border/20" />}
                 {m.mine && <div className="absolute -right-1.5 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[8px] border-l-[#e8c9d4]" />}
-                
+
                 {/* Reply Preview */}
                 {m.replyTo && (
                   <div className="mb-3 rounded-lg border-l-3 border-primary bg-primary/5 px-3 py-2 text-xs text-muted">
@@ -429,17 +429,17 @@ export function ChatView() {
 
                 {/* Media Content - More Compact */}
                 {m.kind === "image" && m.imageUrl && (
-                  <img 
-                    src={m.imageUrl} 
-                    alt="Photo message" 
-                    className="mb-2 max-h-56 w-full rounded-lg object-cover shadow-sm" 
-                    onError={(event) => { 
-                      event.currentTarget.hidden = true; 
-                      event.currentTarget.parentElement?.classList.add("media-load-error"); 
-                    }} 
+                  <img
+                    src={m.imageUrl}
+                    alt="Photo message"
+                    className="mb-2 max-h-56 w-full rounded-lg object-cover shadow-sm"
+                    onError={(event) => {
+                      event.currentTarget.hidden = true;
+                      event.currentTarget.parentElement?.classList.add("media-load-error");
+                    }}
                   />
                 )}
-                
+
                 {m.kind === "voice" && m.audioUrl && (
                   <div className="mb-2 flex items-center gap-2 rounded-lg bg-white/50 p-2">
                     <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full hover:bg-white/50 p-0" onClick={() => {
@@ -458,44 +458,44 @@ export function ChatView() {
                     </Button>
                     <div className="flex flex-1 items-center gap-0.5">
                       {waveform.slice(0, 15).map((height, index) => (
-                        <span key={index} className={`w-[2px] shrink-0 rounded-full bg-primary/60 ${playingVoiceId === m.id ? "" : "animate-pulse"}`} style={{ height: `${height * 0.7}px` }} />
+                        <span key={index} className={`w-[2px] shrink-0 rounded-full bg-primary/60 \( {playingVoiceId === m.id ? "" : "animate-pulse"}`} style={{ height: ` \){height * 0.7}px` }} />
                       ))}
                     </div>
                     {m.duration && <span className="text-[11px] text-muted">{formatDuration(m.duration)}</span>}
                     <audio id={`audio-${m.id}`} src={m.audioUrl} preload="metadata" className="hidden" onEnded={() => setPlayingVoiceId(null)} onError={() => setRecordingError("A received voice note could not be loaded or played.")} />
                   </div>
                 )}
-                
+
                 {m.kind === "video" && m.videoUrl && (
-                  <video 
-                    src={m.videoUrl} 
-                    controls 
+                  <video
+                    src={m.videoUrl}
+                    controls
                     playsInline
-                    className="mb-2 max-h-56 w-full rounded-lg shadow-sm" 
+                    className="mb-2 max-h-56 w-full rounded-lg shadow-sm"
                   />
                 )}
-                
+
                 {m.kind === "gif" && m.imageUrl && (
                   <>
-                    <img 
-                      src={m.imageUrl} 
-                      alt="Sticker" 
-                      className="mb-2 max-h-40 max-w-40 rounded-lg object-contain shadow-sm" 
-                      onError={(event) => { 
-                        event.currentTarget.hidden = true; 
-                        setRecordingError("This sticker image could not be displayed."); 
-                      }} 
+                    <img
+                      src={m.imageUrl}
+                      alt="Sticker"
+                      className="mb-2 max-h-40 max-w-40 rounded-lg object-contain shadow-sm"
+                      onError={(event) => {
+                        event.currentTarget.hidden = true;
+                        setRecordingError("This sticker image could not be displayed.");
+                      }}
                     />
                     <button type="button" className="mb-1 text-[10px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>
                       ★ Save
-
+                    </button>
                   </>
                 )}
-                
+
                 {m.kind === "file" && m.fileUrl && (
-                  <a 
-                    href={m.fileUrl} 
-                    download={m.fileName || "file"} 
+                  <a
+                    href={m.fileUrl}
+                    download={m.fileName || "file"}
                     className="mb-3 flex items-center gap-3 rounded-xl bg-primary/10 p-3 text-sm text-primary shadow-sm hover:bg-primary/15 transition-colors"
                   >
                     <FileText className="size-6 shrink-0" />
@@ -565,9 +565,9 @@ export function ChatView() {
       {/* Voice Preview - More Compact */}
       {voicePreview && (
         <div className="border-t border-border/20 bg-[#fff8fa] px-2 py-2">
-          <audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => { 
-            const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0; 
-            setVoicePreview((preview) => preview ? { ...preview, duration } : preview); 
+          <audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => {
+            const duration = Number.isFinite(e.currentTarget.duration) ? e.currentTarget.duration : 0;
+            setVoicePreview((preview) => preview ? { ...preview, duration } : preview);
           }} onEnded={() => setPreviewPlaying(false)} className="hidden" />
           <div className="flex w-full items-center gap-2 rounded-xl border border-primary/20 bg-white p-2 shadow-sm">
             <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full hover:bg-primary/5 p-0" onClick={togglePreview} aria-label={previewPlaying ? "Pause voice note" : "Play voice note"}>
@@ -599,26 +599,26 @@ export function ChatView() {
               <X className="size-3" />
             </Button>
             {mediaPreview.kind === "image" ? (
-              <img 
-                src={mediaPreview.url} 
-                alt="Photo preview" 
-                className="max-h-56 w-full rounded-lg object-cover" 
-                onError={() => setRecordingError("This image format could not be previewed in this browser.")} 
+              <img
+                src={mediaPreview.url}
+                alt="Photo preview"
+                className="max-h-56 w-full rounded-lg object-cover"
+                onError={() => setRecordingError("This image format could not be previewed in this browser.")}
               />
             ) : (
-              <video 
-                src={mediaPreview.url} 
-                controls 
-                className="max-h-56 w-full rounded-lg bg-black" 
-                onError={() => setRecordingError("This video format could not be previewed in this browser.")} 
+              <video
+                src={mediaPreview.url}
+                controls
+                className="max-h-56 w-full rounded-lg bg-black"
+                onError={() => setRecordingError("This video format could not be previewed in this browser.")}
               />
             )}
             <div className="mt-2 flex items-center gap-2">
-              <input 
-                value={mediaCaption} 
-                onChange={(e) => setMediaCaption(e.target.value)} 
-                placeholder="Caption..." 
-                className="min-h-8 flex-1 rounded-full border border-border bg-white px-3 text-[13px] text-fg outline-none focus:border-primary" 
+              <input
+                value={mediaCaption}
+                onChange={(e) => setMediaCaption(e.target.value)}
+                placeholder="Caption..."
+                className="min-h-8 flex-1 rounded-full border border-border bg-white px-3 text-[13px] text-fg outline-none focus:border-primary"
                 aria-label="Media caption"
               />
               <Button type="button" size="icon" className="size-8 shrink-0 rounded-full bg-primary hover:bg-primary/90 text-white p-0" onClick={sendMediaPreview} aria-label="Send media">
@@ -654,7 +654,7 @@ export function ChatView() {
           </div>
           <div className="grid max-h-72 grid-cols-5 gap-2 overflow-y-auto pr-1 sm:grid-cols-6">
             {(stickerTab === "flink" ? flinkStarterStickers : stickerTab === "favorites" ? favoriteStickers : stickers).map((sticker, index) => (
-              <div key={`${sticker.slice(0, 20)}-${index}`} className="relative aspect-square rounded-2xl border border-border/20 bg-mist/50 p-1.5 hover:border-primary/30 transition-colors">
+              <div key={`\( {sticker.slice(0, 20)}- \){index}`} className="relative aspect-square rounded-2xl border border-border/20 bg-mist/50 p-1.5 hover:border-primary/30 transition-colors">
                 <button type="button" className="size-full" onClick={() => void sendSavedSticker(sticker)}>
                   <img src={sticker} alt="Sticker" className="size-full object-contain" />
                 </button>
@@ -683,15 +683,15 @@ export function ChatView() {
       )}
 
       {/* Compact Input Area - WhatsApp Style */}
-      <form 
-        className="flex items-end gap-2 border-t border-border/20 bg-[#fff8fa] px-2 py-2" 
-        onSubmit={(e) => { 
-          e.preventDefault(); 
-          if (draft.trim()) { 
-            void sendText(draft, replyingTo ?? undefined); 
-            setDraft(""); 
-            setReplyingTo(null); 
-          } 
+      <form
+        className="flex items-end gap-2 border-t border-border/20 bg-[#fff8fa] px-2 py-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (draft.trim()) {
+            void sendText(draft, replyingTo ?? undefined);
+            setDraft("");
+            setReplyingTo(null);
+          }
         }}
       >
         {/* Hidden File Inputs */}
@@ -713,14 +713,14 @@ export function ChatView() {
             {emojiComposerOpen && (
               <div className="absolute bottom-12 left-0 z-20 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl">
                 {"😀,😂,😍,🥰,😎,😢,😡,👍,👎,👏,🤟,💪,🎉,❤️,💔,🚀,💬,🦍,✅,❌,🏆,🤣".split(",").map((emoji) => (
-                  <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => `${value}${emoji}`); setEmojiComposerOpen(false); }}>
+                  <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => `\( {value} \){emoji}`); setEmojiComposerOpen(false); }}>
                     {emoji}
                   </button>
                 ))}
               </div>
             )}
           </div>
-          
+
           {/* Sticker Button */}
           <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setStickerTrayOpen((open) => !open)} aria-label="Stickers">
             <ImageIcon className="size-5" />
@@ -728,21 +728,21 @@ export function ChatView() {
         </div>
 
         {/* Compact Text Input */}
-        <textarea 
-          value={draft} 
-          onChange={(e) => setDraft(e.target.value)} 
-          rows={1} 
-          placeholder={recordingVoice ? `Recording... ${recordingSeconds}s` : "Message..."} 
-          className="max-h-32 min-h-9 flex-1 resize-none rounded-[20px] border-0 bg-white px-4 py-2.5 text-[14px] text-fg outline-none placeholder:text-muted focus:ring-0 transition-colors" 
-          onKeyDown={(e) => { 
-            if (e.key === "Enter" && !e.shiftKey) { 
-              e.preventDefault(); 
-              if (draft.trim()) { 
-                void sendText(draft, replyingTo ?? undefined); 
-                setDraft(""); 
-                setReplyingTo(null); 
-              } 
-            } 
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          rows={1}
+          placeholder={recordingVoice ? `Recording... ${recordingSeconds}s` : "Message..."}
+          className="max-h-32 min-h-9 flex-1 resize-none rounded-[20px] border-0 bg-white px-4 py-2.5 text-[14px] text-fg outline-none placeholder:text-muted focus:ring-0 transition-colors"
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) {
+              e.preventDefault();
+              if (draft.trim()) {
+                void sendText(draft, replyingTo ?? undefined);
+                setDraft("");
+                setReplyingTo(null);
+              }
+            }
           }}
         />
 
@@ -771,25 +771,25 @@ export function ChatView() {
               </div>
             )}
           </div>
-          
+
           {/* Voice Record / Send Button */}
           {!draft.trim() && (
-            <Button 
-              type="button" 
-              variant="ghost" 
-              size="icon" 
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
               className={`size-9 rounded-full transition-colors ${
-                recordingVoice 
-                  ? "bg-danger hover:bg-danger/90 text-white" 
+                recordingVoice
+                  ? "bg-danger hover:bg-danger/90 text-white"
                   : "text-primary hover:bg-primary/10"
-              }`} 
-              onClick={() => void toggleVoiceRecording()} 
+              }`}
+              onClick={() => void toggleVoiceRecording()}
               aria-label={recordingVoice ? "Stop recording" : "Record voice note"}
             >
               {recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}
             </Button>
           )}
-          
+
           {draft.trim() && (
             <Button type="submit" size="icon" className="size-9 rounded-full bg-primary hover:bg-primary/90 text-white transition-colors" aria-label="Send message">
               <Send className="size-4" />
@@ -827,17 +827,17 @@ function renderLinkedText(value?: string) {
   if (!value) return null;
   const parts = value.split(/(https?:\/\/[^\s]+)/g);
   return parts.map((part, index) => {
-    if (!/^https?:\/\//.test(part)) return <span key={`${part}-${index}`}>{part}</span>;
+    if (!/^https?:\/\//.test(part)) return <span key={`\( {part}- \){index}`}>{part}</span>;
     try {
       const url = new URL(part);
       if (url.hostname.includes("flink") || url.hash.startsWith("#room/")) {
-        return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-1.5 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors text-[13px]">
+        return <a key={`\( {part}- \){index}`} href={part} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-1.5 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors text-[13px]">
           <span className="text-xs">🔗</span>
           <span className="min-w-0 truncate max-w-[200px]">{url.hash.startsWith("#room/") ? "Join Flink Room" : part}</span>
         </a>;
       }
     } catch { /* keep raw URL */ }
-    return <a key={`${part}-${index}`} href={part} target="_blank" rel="noreferrer" className="text-primary underline hover:no-underline text-[13px]">
+    return <a key={`\( {part}- \){index}`} href={part} target="_blank" rel="noreferrer" className="text-primary underline hover:no-underline text-[13px]">
       {part}
     </a>;
   });
@@ -870,4 +870,4 @@ function compressSticker(file: File) {
     image.onerror = () => { URL.revokeObjectURL(sourceUrl); reject(new Error("Could not read sticker")); };
     image.src = sourceUrl;
   });
-}
+    }
