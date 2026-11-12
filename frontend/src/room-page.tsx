@@ -93,6 +93,10 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
   async function toggleScreenShare() {
     const session = sessionRef.current;
     if (!session || mode !== 'video') return;
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      setStatus('Screen sharing is not supported by this browser. Try Chrome, Edge, or desktop Safari over HTTPS.');
+      return;
+    }
     const stopShare = () => {
       screenRef.current?.getTracks().forEach((track) => track.stop());
       screenRef.current = null;
@@ -105,14 +109,15 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: false });
       screenRef.current = stream;
       stream.getVideoTracks()[0]?.addEventListener('ended', stopShare, { once: true });
       session.attachLocal(stream);
       session.sendScreenShare(true);
       setScreenSharing(true);
-    } catch {
-      setStatus('Screen sharing was cancelled');
+    } catch (error) {
+      const name = error instanceof DOMException ? error.name : '';
+      setStatus(name === 'NotAllowedError' ? 'Screen sharing was cancelled or blocked by the browser.' : 'Screen sharing could not start. Check that this room is open over HTTPS.');
     }
   }
 

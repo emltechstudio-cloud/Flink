@@ -81,12 +81,14 @@ export class FlinkSession {
   }
 
   attachLocal(stream: MediaStream) {
-    this.localStream = stream;
+    const audioTracks = stream.getAudioTracks().length > 0 ? stream.getAudioTracks() : this.localStream?.getAudioTracks() ?? [];
+    const videoTracks = stream.getVideoTracks();
+    this.localStream = new MediaStream([...audioTracks, ...videoTracks]);
     for (const slot of this.peers.values()) {
-      for (const track of stream.getTracks()) {
+      for (const track of this.localStream.getTracks()) {
         const existing = slot.pc.getSenders().find((s) => s.track?.kind === track.kind);
         if (existing) void existing.replaceTrack(track);
-        else slot.pc.addTrack(track, stream);
+        else slot.pc.addTrack(track, this.localStream);
       }
     }
   }
