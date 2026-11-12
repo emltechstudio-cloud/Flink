@@ -28,6 +28,7 @@ export type Contact = {
   lastSeen: number;
   online?: boolean;
   lastOnline?: number;
+  avatarDataUrl?: string;
 };
 
 export type Reaction = {

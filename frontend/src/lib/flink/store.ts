@@ -122,16 +122,18 @@ function threadIdFor(number: string) {
 
 async function deliverChat(threadId: string, payload: Parameters<FlinkSession["sendChat"]>[0]) {
   const state = useFlink.getState();
+  const profile = state.profile;
+  const payloadWithAvatar = profile?.avatarDataUrl ? { ...payload, avatarDataUrl: profile.avatarDataUrl } : payload;
   const peer = threadId.startsWith("d-") ? threadId.slice(2) : "";
   if ((!state.session || state.sessionEnded) && /^\d{6}$/.test(peer)) {
     void state.startNewSession(peer);
   }
-  const sent = state.session?.sendChat(payload) ?? false;
+  const sent = state.session?.sendChat(payloadWithAvatar) ?? false;
   if (sent) return true;
   await flinkStorage.putOutbox({
     id: payload.id,
     threadId,
-    payload: payload as unknown as Record<string, unknown>,
+    payload: payloadWithAvatar as unknown as Record<string, unknown>,
     createdAt: Date.now(),
     attempts: 0,
   });
@@ -1021,6 +1023,8 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       stopRingtone();
       void flushChatOutbox();
       if (mode === "voice" || mode === "video") void finishCurrentCall("connected");
+      const identity = useFlink.getState().profile;
+      if (identity?.avatarDataUrl) session.sendChat({ kind: "participant_info", displayName: identity.flinkNumber, avatarDataUrl: identity.avatarDataUrl, id: randomId(8), ts: Date.now() });
       const number = /^\d{6}$/.test(peerLabel) ? peerLabel : undefined;
       if (number) {
         await useFlink.getState().upsertContact(number);
@@ -1045,6 +1049,12 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
     onChat: async (from, data) => {
       const number = /^\d{6}$/.test(from) ? from : peerLabel;
       const tid = threadIdFor(number);
+      if (/^\d{6}$/.test(number) && data.avatarDataUrl) {
+        const existing = useFlink.getState().contacts.find((contact) => contact.flinkNumber === number);
+        const contact: Contact = { flinkNumber: number, name: existing?.name || number, lastSeen: Date.now(), avatarDataUrl: data.avatarDataUrl };
+        await flinkStorage.putContact(contact);
+        useFlink.setState((state) => ({ contacts: [contact, ...state.contacts.filter((item) => item.flinkNumber !== number)] }));
+      }
       
       // Handle receipts
       if (data.kind === "receipt" && data.messageId && data.status) {
@@ -1091,6 +1101,12 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       }
       if (data.kind === "participant_info") {
         useFlink.getState().updateParticipant(from, { name: data.displayName as string, joinedAt: Date.now() });
+        if (/^\d{6}$/.test(from) && data.avatarDataUrl) {
+          const existing = useFlink.getState().contacts.find((contact) => contact.flinkNumber === from);
+          const contact: Contact = { flinkNumber: from, name: existing?.name || String(data.displayName || from), lastSeen: Date.now(), avatarDataUrl: data.avatarDataUrl };
+          void flinkStorage.putContact(contact);
+          useFlink.setState((state) => ({ contacts: [contact, ...state.contacts.filter((item) => item.flinkNumber !== from)] }));
+        }
         return;
       }
       

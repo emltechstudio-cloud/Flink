@@ -222,7 +222,8 @@ export function ChatView() {
   if (!activeThread) return <div className="flex flex-1 items-center justify-center text-sm text-muted">Select a conversation</div>;
 
   const peer = activeThread.peerNumber ?? activeThread.title;
-  const name = contacts.find((c) => c.flinkNumber === peer)?.name || formatFlinkNumber(peer);
+  const peerContact = contacts.find((c) => c.flinkNumber === peer);
+  const name = peerContact?.name || formatFlinkNumber(peer);
   const savedContact = contacts.some((contact) => contact.flinkNumber === peer);
   const status = peerStatuses.get(peer);
   const statusLabel = status?.online ? "Online" : status?.lastSeen ? `Last seen: ${formatTime(status.lastSeen)}` : callStatus || formatFlinkNumber(peer);
@@ -231,7 +232,7 @@ export function ChatView() {
     <div className="flex min-h-0 flex-1 flex-col bg-[#f8eef2]">
       <header className="relative flex items-center gap-1 bg-primary px-1 py-2 text-primary-fg shadow-sm">
         <Button variant="ghost" size="icon" className="text-primary-fg hover:bg-white/10" onClick={() => setView("history")} aria-label="Back"><ArrowLeft className="size-5" /></Button>
-        <NumberAvatar seed={peer} label={name} size={40} />
+        {peerContact?.avatarDataUrl ? <img src={peerContact.avatarDataUrl} alt={`${name} avatar`} className="size-10 rounded-full object-cover" /> : <NumberAvatar seed={peer} label={name} size={40} />}
         <div className="min-w-0 flex-1"><p className="truncate text-[15px] font-semibold">{name}</p><p className="text-xs text-primary-fg/75">{statusLabel}</p></div>
         {/^[0-9]{6}$/.test(peer) && (
           <div className="relative ml-auto flex items-center gap-1 rounded-full bg-black/10 p-1">
