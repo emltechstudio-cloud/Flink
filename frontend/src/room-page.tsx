@@ -22,6 +22,8 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
+  const [hostName, setHostName] = useState(title);
+  const [hostAvatar, setHostAvatar] = useState<string | undefined>();
   const [remotes, setRemotes] = useState<Array<{ id: string; stream: MediaStream }>>([]);
   const [screenSharing, setScreenSharing] = useState(false);
   const sessionRef = useRef<FlinkSession | null>(null);
@@ -59,6 +61,11 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
       const session = new FlinkSession(id, profile?.accessToken, mode, {
         onStatus: setStatus,
         onChat: (from, data) => {
+          if (data.kind === 'participant_info') {
+            if (data.displayName) setHostName(data.displayName);
+            if (data.avatarDataUrl) setHostAvatar(data.avatarDataUrl);
+            return;
+          }
           const message: ChatMessage = {
             id: data.id,
             threadId: id,
@@ -80,7 +87,7 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
         onPeerMedia: (peerId, media) => setRemotes((current) => [...current.filter((item) => item.id !== peerId), { id: peerId, stream: media }]),
         onPeerLeft: (peerId) => setRemotes((current) => current.filter((item) => item.id !== peerId)),
         onConnected: () => setStatus('Connected'),
-      }, display);
+      }, display, profile?.avatarDataUrl);
       await session.start(stream);
       sessionRef.current = session;
       setJoined(true);
@@ -149,7 +156,7 @@ export function RoomPage({ id, mode: rawMode, title }: { id: string; mode: strin
   return (
     <div className="mx-auto flex min-h-dvh max-w-md flex-col bg-bg">
       <header className="flex items-center justify-between border-b border-border bg-surface px-4 py-3">
-        <div className="flex items-center gap-3"><div className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-fg"><FlinkMark size={21} /></div><div><p className="font-semibold">{title}</p><p className="text-xs text-muted">{status} · Flink room</p></div></div>
+        <div className="flex min-w-0 items-center gap-3">{hostAvatar ? <img src={hostAvatar} alt={`${hostName} avatar`} className="size-10 rounded-2xl object-cover" /> : <div className="flex size-10 items-center justify-center rounded-2xl bg-primary text-primary-fg"><FlinkMark size={21} /></div>}<div className="min-w-0"><p className="truncate font-semibold">{title}</p><p className="truncate text-xs text-muted">{status} · {hostName}</p></div></div>
         <Button variant="danger" size="sm" onClick={() => { sessionRef.current?.close(); window.location.hash = ''; }}>Leave</Button>
       </header>
       {mode !== 'chat' && <div className="relative min-h-[240px] flex-1 bg-call">

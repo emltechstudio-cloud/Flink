@@ -44,8 +44,9 @@ export function IncomingSheet() {
 }
 
 export function CallOverlay() {
-  const { outgoing, session, callStatus, remoteMedia, hangup, cancelOutgoing, muted, videoOff, toggleMute, toggleVideo, toggleScreenShare, isScreenSharing, screenStream, roomParticipants, contacts } =
+  const { outgoing, session, callStatus, callConnectedAt, remoteMedia, hangup, cancelOutgoing, muted, videoOff, toggleMute, toggleVideo, toggleScreenShare, isScreenSharing, screenStream, roomParticipants, contacts } =
     useFlink();
+  const [elapsed, setElapsed] = useState(0);
   const localRef = useRef<HTMLVideoElement>(null);
   const remoteRef = useRef<HTMLVideoElement>(null);
   const remoteAudioRef = useRef<HTMLAudioElement>(null);
@@ -66,6 +67,17 @@ export function CallOverlay() {
     if (screenRef.current && screenStream) screenRef.current.srcObject = screenStream;
   }, [screenStream]);
 
+  useEffect(() => {
+    if (!callConnectedAt) {
+      setElapsed(0);
+      return;
+    }
+    const update = () => setElapsed(Math.max(0, Math.floor((Date.now() - callConnectedAt) / 1000)));
+    update();
+    const timer = setInterval(update, 1000);
+    return () => clearInterval(timer);
+  }, [callConnectedAt]);
+
   if (!inCall || !outgoing) return null;
   const video = outgoing.mode === "video";
   const participantCount = Math.max(1, roomParticipants.size + 1);
@@ -80,7 +92,7 @@ export function CallOverlay() {
       <div className="relative min-h-0 flex-1">
         {video ? (
           <>
-            <video ref={remoteRef} autoPlay playsInline className="h-full w-full object-cover" />
+            {remoteMedia.length > 1 ? <div className="grid h-full auto-rows-fr grid-cols-1 gap-1 sm:grid-cols-2">{remoteMedia.map((remote) => <RemoteTile key={remote.id} stream={remote.stream} />)}</div> : <video ref={remoteRef} autoPlay playsInline className="h-full w-full object-cover" />}
             {isScreenSharing && screenStream && (
               <video
                 ref={screenRef}
@@ -103,14 +115,14 @@ export function CallOverlay() {
             <NumberAvatar seed={outgoing.to} label={outgoing.to} size={120} />
             <p className="font-display mt-5 text-3xl">{peerName}</p>
             <p className="text-sm text-subtle">{formatFlinkNumber(outgoing.to)}</p>
-            <p className="mt-3 rounded-full bg-call-fg/10 px-4 py-2 text-sm text-call-fg/80">{callStatus || "Waiting for them to answer"}</p>
+            <p className="mt-3 rounded-full bg-call-fg/10 px-4 py-2 text-sm text-call-fg/80">{callStatus || "Waiting for them to answer"}{callConnectedAt && <span className="ml-2 tabular-nums">{formatDuration(elapsed)}</span>}</p>
           </div>
         )}
         {video && (
           <div className="pointer-events-none absolute inset-x-0 top-0 bg-gradient-to-b from-call/70 to-transparent p-5 pt-10 text-center">
             <p className="font-display text-xl">{peerName}</p>
             <p className="text-xs text-subtle">{formatFlinkNumber(outgoing.to)}</p>
-            <p className="text-sm text-subtle">{callStatus || "Waiting for them to answer"}</p>
+            <p className="text-sm text-subtle">{callStatus || "Waiting for them to answer"}{callConnectedAt && <span className="ml-2 tabular-nums">{formatDuration(elapsed)}</span>}</p>
           </div>
         )}
         {isScreenSharing && (
@@ -158,6 +170,12 @@ export function CallOverlay() {
   );
 }
 
+function RemoteTile({ stream }: { stream: MediaStream }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  useEffect(() => { if (ref.current) ref.current.srcObject = stream; }, [stream]);
+  return <video ref={ref} autoPlay playsInline className="h-full w-full object-cover" />;
+}
+
 export function WaitingBanner() {
   const { outgoing, session, callStatus, cancelOutgoing, sessionEnded, roomParticipants } = useFlink();
   if (!outgoing || !session) return null;
@@ -181,4 +199,10 @@ export function WaitingBanner() {
       </button>
     </div>
   );
+}
+
+function formatDuration(seconds: number) {
+  const minutes = Math.floor(seconds / 60);
+  const remainder = seconds % 60;
+  return `${minutes}:${String(remainder).padStart(2, "0")}`;
 }

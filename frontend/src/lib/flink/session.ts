@@ -54,6 +54,8 @@ export class FlinkSession {
   private localStream: MediaStream | null = null;
   private iceServers: RTCIceServer[] = [];
   private selfId = "";
+  private reconnectAttempts = new Map<string, number>();
+  private reconnectTimers = new Map<string, ReturnType<typeof setTimeout>>();
   closed = false;
   private static readonly CHUNK_SIZE = 48_000;
 
@@ -165,6 +167,9 @@ export class FlinkSession {
       }
       slot.pc.close();
     }
+    for (const timer of this.reconnectTimers.values()) clearTimeout(timer);
+    this.reconnectTimers.clear();
+    this.reconnectAttempts.clear();
     this.peers.clear();
     this.localStream?.getTracks().forEach((t) => t.stop());
     this.localStream = null;
@@ -172,6 +177,10 @@ export class FlinkSession {
 
   get local() {
     return this.localStream;
+  }
+
+  get peerCount() {
+    return this.peers.size;
   }
 
   private async onSignal(event: SignalEvent) {
@@ -260,21 +269,39 @@ export class FlinkSession {
     };
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === "connected") {
+        this.reconnectAttempts.delete(id);
+        const timer = this.reconnectTimers.get(id);
+        if (timer) clearTimeout(timer);
+        this.reconnectTimers.delete(id);
         this.handlers.onConnected(this.peers.size);
         this.handlers.onStatus("Connected");
       }
       if (pc.connectionState === "failed" || pc.connectionState === "disconnected") {
-        this.handlers.onStatus("Connection dropped");
-        if (!polite && !this.closed) {
-          setTimeout(() => {
-            if (this.closed || pc.connectionState === "connected" || pc.connectionState === "closed") return;
-            try {
-              pc.restartIce();
-            } catch {
-              /* browser may reject restart after teardown */
-            }
-          }, 800);
+        if (this.closed || this.reconnectTimers.has(id)) return;
+        const attempts = this.reconnectAttempts.get(id) ?? 0;
+        if (attempts >= 2) {
+          this.handlers.onStatus("Connection lost — try again");
+          this.dropPeer(id);
+          return;
         }
+        this.reconnectAttempts.set(id, attempts + 1);
+        this.handlers.onStatus(`Reconnecting… (${attempts + 1}/2)`);
+        const timer = setTimeout(async () => {
+          this.reconnectTimers.delete(id);
+          if (this.closed || pc.connectionState === "connected" || pc.connectionState === "closed") return;
+          try {
+            pc.restartIce();
+            if (!polite && pc.signalingState === "stable") {
+              slot.makingOffer = true;
+              await pc.setLocalDescription(await pc.createOffer({ iceRestart: true }));
+              this.signaling.send("offer", pc.localDescription, id);
+              slot.makingOffer = false;
+            }
+          } catch {
+            /* the next connection-state event counts the failed attempt */
+          }
+        }, attempts === 0 ? 700 : 1800);
+        this.reconnectTimers.set(id, timer);
       }
     };
 
@@ -396,6 +423,10 @@ export class FlinkSession {
     const slot = this.peers.get(id);
     if (!slot) return;
     slot.pc.close();
+    const timer = this.reconnectTimers.get(id);
+    if (timer) clearTimeout(timer);
+    this.reconnectTimers.delete(id);
+    this.reconnectAttempts.delete(id);
     this.peers.delete(id);
     this.handlers.onPeerLeft(id, slot.flinkNumber ?? undefined);
   }

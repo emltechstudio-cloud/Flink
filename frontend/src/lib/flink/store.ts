@@ -74,6 +74,7 @@ type FlinkState = {
   outgoing: { to: string; mode: CommMode; sessionId: string } | null;
   session: FlinkSession | null;
   callStatus: string;
+  callConnectedAt: number | null;
   remoteMedia: RemoteMedia[];
   muted: boolean;
   videoOff: boolean;
@@ -184,7 +185,11 @@ async function finishCurrentCall(status: CallLog["status"]) {
   if (!outgoing || (outgoing.mode !== "voice" && outgoing.mode !== "video")) return;
   const current = state.calls.find((call) => call.peer === outgoing.to && ["calling", "ringing", "connected"].includes(call.status));
   if (!current) return;
-  const updated = { ...current, status };
+  const updated = {
+    ...current,
+    status,
+    durationSec: state.callConnectedAt ? Math.max(0, Math.round((Date.now() - state.callConnectedAt) / 1000)) : current.durationSec,
+  };
   await flinkStorage.putCall(updated);
   useFlink.setState((next) => ({ calls: next.calls.map((call) => call.id === updated.id ? updated : call) }));
 }
@@ -222,6 +227,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
   outgoing: null,
   session: null,
   callStatus: "",
+  callConnectedAt: null,
   remoteMedia: [],
   muted: false,
   videoOff: false,
@@ -500,7 +506,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       return;
     }
     const sid = sessionId("s");
-    set({ busy: true, outgoing: { to: target, mode, sessionId: sid }, callStatus: mode === "voice" || mode === "video" ? "Calling…" : "Connecting…", sessionEnded: false });
+    set({ busy: true, outgoing: { to: target, mode, sessionId: sid }, callStatus: mode === "voice" || mode === "video" ? "Calling…" : "Connecting…", callConnectedAt: null, sessionEnded: false });
     if (mode === "voice" || mode === "video") startRingtone();
     try {
       await flinkApi.ping(profile.accessToken, target, mode, sid);
@@ -540,6 +546,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       busy: true,
       outgoing: { to: group.name, mode, sessionId: sid },
       callStatus: `Approaching ${group.name}…`,
+      callConnectedAt: null,
     });
     try {
       await flinkApi.groupPing(profile.accessToken, group.group_id, mode, sid);
@@ -599,7 +606,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       void dropMailbox(outgoing.to, { type: "call-cancelled", from: profile.flinkNumber, session_id: outgoing.sessionId }, profile.accessToken);
     }
     get().session?.close();
-    set({ session: null, outgoing: null, remoteMedia: [], callStatus: "Call ended", sessionEnded: true });
+    set({ session: null, outgoing: null, remoteMedia: [], callStatus: "Call ended", callConnectedAt: null, sessionEnded: true });
   },
 
   async openThread(thread) {
@@ -690,14 +697,14 @@ export const useFlink = create<FlinkState>((set, get) => ({
     stopRingtone();
     void finishCurrentCall(status);
     get().session?.close();
-    set({ session: null, outgoing: null, incoming: null, remoteMedia: [], callStatus: "", muted: false, videoOff: false, sessionEnded: true, isScreenSharing: false, screenStream: null, localCameraStream: null, roomParticipants: new Map() });
+    set({ session: null, outgoing: null, incoming: null, remoteMedia: [], callStatus: "", callConnectedAt: null, muted: false, videoOff: false, sessionEnded: true, isScreenSharing: false, screenStream: null, localCameraStream: null, roomParticipants: new Map() });
   },
 
   endSession() {
     stopRingtone();
     void finishCurrentCall("ended");
     get().session?.close();
-    set({ session: null, outgoing: null, incoming: null, remoteMedia: [], callStatus: "", muted: false, videoOff: false, sessionEnded: true, isScreenSharing: false, screenStream: null, localCameraStream: null, roomParticipants: new Map() });
+    set({ session: null, outgoing: null, incoming: null, remoteMedia: [], callStatus: "", callConnectedAt: null, muted: false, videoOff: false, sessionEnded: true, isScreenSharing: false, screenStream: null, localCameraStream: null, roomParticipants: new Map() });
   },
 
   async startNewSession(peerNumber: string) {
@@ -1052,7 +1059,10 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
     onConnected: async () => {
       stopRingtone();
       void flushChatOutbox();
-      if (mode === "voice" || mode === "video") void finishCurrentCall("connected");
+      if (mode === "voice" || mode === "video") {
+        if (!useFlink.getState().callConnectedAt) useFlink.setState({ callConnectedAt: Date.now() });
+        void finishCurrentCall("connected");
+      }
       const number = /^\d{6}$/.test(peerLabel) ? peerLabel : undefined;
       if (number) {
         await useFlink.getState().upsertContact(number);
@@ -1214,9 +1224,11 @@ async function joinSession(sid: string, mode: CommMode, peerLabel: string) {
       if (flinkNumber) {
         useFlink.getState().updatePeerStatus(flinkNumber, false, false, false);
       }
-      if (mode === "voice" || mode === "video") {
+      if ((mode === "voice" || mode === "video") && session.peerCount === 0) {
         toast.message("Call ended");
         useFlink.getState().hangup();
+      } else if (mode === "voice" || mode === "video") {
+        toast.message("A participant left");
       } else {
         useFlink.setState({ sessionEnded: true, callStatus: "Connection ended" });
       }
