@@ -89,7 +89,7 @@ export function dismissPersistentNotification(tag: string) {
 export function notifyIncomingCall(from: string, mode: string) {
   showPersistentNotification(
     `Incoming ${mode === "voice" ? "Call" : "Video Call"} on Flink`,
-    `${from} wants to connect with you`,
+    `This is a call from Inet. ${from} wants to connect with you`,
     `call-${from}-${Date.now()}`,
     { type: "call", from, mode, ts: Date.now() }
   );
@@ -98,7 +98,7 @@ export function notifyIncomingCall(from: string, mode: string) {
 export function notifyNewMessage(from: string, text: string) {
   showPersistentNotification(
     "New Flink message",
-    `${from}: ${text.slice(0, 50)}${text.length > 50 ? "..." : ""}`,
+    `This is a message from Inet. ${from}: ${text.slice(0, 50)}${text.length > 50 ? "..." : ""}`,
     `msg-${from}-${Date.now()}`,
     { type: "message", from, text, ts: Date.now() }
   );
