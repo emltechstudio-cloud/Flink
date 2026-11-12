@@ -14,7 +14,7 @@ const MAX_VOICE_BYTES = 20_000_000;
 const MAX_STICKER_BYTES = 2_000_000;
 const MAX_STICKER_DIMENSION = 256;
 const waveform = [4, 8, 13, 9, 16, 11, 19, 12, 7, 15, 10, 18, 8, 14, 6, 11, 17, 9, 13, 5, 10, 15, 8, 12];
-const flinkStarterStickers = ["\u2726", "\u2665", "\u2605", "\u263a", "\u2600", "\u26a1", "\u2713", "\u2192"].map((mark, index) => `data:image/svg+xml,\( {encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill=" \){["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]}"/><text x="64" y="82" text-anchor="middle" font-size="68" fill="white">${mark}</text></svg>`)}`);
+const flinkStarterStickers = ["\u2726", "\u2665", "\u2605", "\u263a", "\u2600", "\u26a1", "\u2713", "\u2192"].map((mark, index) => ("data:image/svg+xml," + (encodeURIComponent(("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 128 128\"><rect width=\"128\" height=\"128\" rx=\"28\" fill=\"" + (["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]) + "\"/><text x=\"64\" y=\"82\" text-anchor=\"middle\" font-size=\"68\" fill=\"white\">" + (mark) + "</text></svg>")))));
 
 export function ChatView() {
   const {
@@ -223,7 +223,7 @@ export function ChatView() {
           if (blob.size > 0) {
             const type = blob.type || "audio/webm";
             const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
-            prepareVoice(new File([blob], `voice-\( {Date.now()}. \){extension}`, { type }));
+            prepareVoice(new File([blob], ("voice-" + (Date.now()) + "." + (extension)), { type }));
           }
           else setRecordingError("No audio was captured. Please try recording again.");
         } catch {
@@ -299,7 +299,7 @@ export function ChatView() {
       setStickers(next);
       await flinkStorage.setSetting("stickers", next);
       setStickerTrayOpen(true);
-      if (imported.length < valid.length) setRecordingError(`${valid.length - imported.length} sticker file(s) could not be imported.`);
+      if (imported.length < valid.length) setRecordingError(((valid.length - imported.length) + " sticker file(s) could not be imported."));
     } catch {
       setRecordingError("Stickers could not be saved on this device. Please try again.");
     }
@@ -314,11 +314,11 @@ export function ChatView() {
         return;
       }
       if (blob.type === "image/gif" || dataUrl.startsWith("data:image/gif")) {
-        await sendGif(new File([blob], `sticker-${Date.now()}.gif`, { type: "image/gif" }), replyingTo ?? undefined);
+        await sendGif(new File([blob], ("sticker-" + (Date.now()) + ".gif"), { type: "image/gif" }), replyingTo ?? undefined);
       } else {
-        const compressed = await compressSticker(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type || "image/webp" }));
+        const compressed = await compressSticker(new File([blob], ("sticker-" + (Date.now()) + ".webp"), { type: blob.type || "image/webp" }));
         const compressedBlob = await (await fetch(compressed)).blob();
-        await sendGif(new File([compressedBlob], `sticker-${Date.now()}.webp`, { type: "image/webp" }), replyingTo ?? undefined);
+        await sendGif(new File([compressedBlob], ("sticker-" + (Date.now()) + ".webp"), { type: "image/webp" }), replyingTo ?? undefined);
       }
       setRecordingError(null);
       setReplyingTo(null);
@@ -340,7 +340,7 @@ export function ChatView() {
   const name = peerContact?.name || formatFlinkNumber(peer);
   const savedContact = contacts.some((contact) => contact.flinkNumber === peer);
   const status = peerStatuses.get(peer);
-  const statusLabel = status?.online ? "Online" : status?.lastSeen ? `Last seen: ${formatTime(status.lastSeen)}` : callStatus || formatFlinkNumber(peer);
+  const statusLabel = status?.online ? "Online" : status?.lastSeen ? ("Last seen: " + (formatTime(status.lastSeen))) : callStatus || formatFlinkNumber(peer);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col bg-[#f8eef2]">
@@ -350,7 +350,7 @@ export function ChatView() {
           <ArrowLeft className="size-5" />
         </Button>
         {peerContact?.avatarDataUrl ? (
-          <img src={peerContact.avatarDataUrl} alt={`${name} avatar`} className="size-10 rounded-full object-cover" />
+          <img src={peerContact.avatarDataUrl} alt={((name) + " avatar")} className="size-10 rounded-full object-cover" />
         ) : (
           <NumberAvatar seed={peer} label={name} size={40} />
         )}
@@ -404,22 +404,19 @@ export function ChatView() {
         )}
 
         {messages.map((m) => (
-          <div key={m.id} className={`mb-3 flex ${m.mine ? "justify-end" : "justify-start"}`}>
-            <div className={`relative max-w-[88%] ${m.kind === "voice" ? "w-[min(92%,360px)]" : ""}`}>
-                      {/* Compact WhatsApp-style Message Bubble */}
+          <div key={m.id} className={("mb-3 flex " + (m.mine ? "justify-end" : "justify-start"))}>
+            <div className={("relative max-w-[88%] " + (m.kind === "voice" ? "w-[min(92%,360px)]" : ""))}>
               <div
-                className={`relative rounded-[16px] px-3 py-2 text-[14px] leading-snug shadow-sm ${
+                className={("relative rounded-[16px] px-3 py-2 text-[14px] leading-snug shadow-sm " + (
                   m.mine
                     ? "rounded-br-[2px] bg-[#e8c9d4] text-fg"
                     : "rounded-bl-[2px] bg-white text-fg border border-border/20"
-                }`}
+                ))}
                 onContextMenu={(e) => { e.preventDefault(); setSelectedMessageId(m.id); setEmojiPickerOpen(true); }}
               >
-                {/* Compact Tail for message bubbles */}
                 {!m.mine && <div className="absolute -left-1.5 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-r-[8px] border-r-border/20" />}
                 {m.mine && <div className="absolute -right-1.5 top-3 w-0 h-0 border-t-[6px] border-t-transparent border-b-[6px] border-b-transparent border-l-[8px] border-l-[#e8c9d4]" />}
 
-                {/* Reply Preview */}
                 {m.replyTo && (
                   <div className="mb-3 rounded-lg border-l-3 border-primary bg-primary/5 px-3 py-2 text-xs text-muted">
                     <span className="font-semibold text-primary">Replying to {m.replyTo.from}</span>
@@ -427,7 +424,6 @@ export function ChatView() {
                   </div>
                 )}
 
-                {/* Media Content - More Compact */}
                 {m.kind === "image" && m.imageUrl && (
                   <img
                     src={m.imageUrl}
@@ -443,7 +439,7 @@ export function ChatView() {
                 {m.kind === "voice" && m.audioUrl && (
                   <div className="mb-2 flex items-center gap-2 rounded-lg bg-white/50 p-2">
                     <Button type="button" variant="ghost" size="icon" className="size-8 shrink-0 rounded-full hover:bg-white/50 p-0" onClick={() => {
-                      const audio = document.getElementById(`audio-${m.id}`) as HTMLAudioElement;
+                      const audio = document.getElementById(("audio-" + (m.id))) as HTMLAudioElement;
                       if (audio) {
                         if (audio.paused) {
                           audio.play();
@@ -458,11 +454,11 @@ export function ChatView() {
                     </Button>
                     <div className="flex flex-1 items-center gap-0.5">
                       {waveform.slice(0, 15).map((height, index) => (
-                        <span key={index} className={`w-[2px] shrink-0 rounded-full bg-primary/60 \( {playingVoiceId === m.id ? "" : "animate-pulse"}`} style={{ height: ` \){height * 0.7}px` }} />
+                        <span key={index} className={("w-[2px] shrink-0 rounded-full bg-primary/60 " + (playingVoiceId === m.id ? "" : "animate-pulse"))} style={{ height: ((height * 0.7) + "px") }} />
                       ))}
                     </div>
                     {m.duration && <span className="text-[11px] text-muted">{formatDuration(m.duration)}</span>}
-                    <audio id={`audio-${m.id}`} src={m.audioUrl} preload="metadata" className="hidden" onEnded={() => setPlayingVoiceId(null)} onError={() => setRecordingError("A received voice note could not be loaded or played.")} />
+                    <audio id={("audio-" + (m.id))} src={m.audioUrl} preload="metadata" className="hidden" onEnded={() => setPlayingVoiceId(null)} onError={() => setRecordingError("A received voice note could not be loaded or played.")} />
                   </div>
                 )}
 
@@ -503,14 +499,12 @@ export function ChatView() {
                   </a>
                 )}
 
-                {/* Text Content */}
                 {(m.kind === "text" || m.caption) && (
                   <p className={m.kind === "text" ? "" : "mt-2 whitespace-pre-wrap"}>
                     {renderLinkedText(m.kind === "text" ? m.text : m.caption)}
                   </p>
                 )}
 
-                {/* Reactions */}
                 {m.reactions && Object.keys(m.reactions).length > 0 && (
                   <div className="mt-3 flex flex-wrap gap-2">
                     {Object.entries(m.reactions).map(([emoji, reaction]) => (
@@ -522,8 +516,7 @@ export function ChatView() {
                   </div>
                 )}
 
-                {/* Compact Message Footer with Status - WhatsApp Style */}
-                <div className={`mt-1.5 flex items-center justify-end gap-1.5 text-[10px] ${m.mine ? "text-primary/70" : "text-muted"}`}>
+                <div className={("mt-1.5 flex items-center justify-end gap-1.5 text-[10px] " + (m.mine ? "text-primary/70" : "text-muted"))}>
                   <button type="button" className="mr-auto inline-flex items-center gap-1 text-primary hover:underline text-[11px]" onClick={() => setReplyingTo(m)}>
                     <Reply className="size-3" /> Reply
                   </button>
@@ -544,7 +537,6 @@ export function ChatView() {
         <div ref={bottom} />
       </div>
 
-      {/* Session Ended Banner - More Compact */}
       {sessionEnded && (
         <div className="border-t border-border/20 bg-[#fff8fa] px-3 py-2.5 text-center">
           <p className="text-[12px] text-muted mb-1.5">Session ended</p>
@@ -554,7 +546,6 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Error Banner - More Compact */}
       {recordingError && (
         <div className="border-t border-danger/20 bg-danger/5 px-3 py-2 text-center text-[12px] text-danger" role="status">
           {recordingError}
@@ -562,7 +553,6 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Voice Preview - More Compact */}
       {voicePreview && (
         <div className="border-t border-border/20 bg-[#fff8fa] px-2 py-2">
           <audio ref={previewAudioRef} src={voicePreview.url} onLoadedMetadata={(e) => {
@@ -575,11 +565,11 @@ export function ChatView() {
             </Button>
             <div className="flex min-w-0 flex-1 items-center gap-0.5">
               {waveform.slice(0, 20).map((height, index) => (
-                <span key={index} className="w-[2px] shrink-0 rounded-full bg-primary/60" style={{ height: `${height * 0.7}px` }} />
+                <span key={index} className="w-[2px] shrink-0 rounded-full bg-primary/60" style={{ height: ((height * 0.7) + "px") }} />
               ))}
             </div>
             <span className="min-w-[35px] text-right text-[11px] text-muted font-medium">
-              {voicePreview.duration ? `${Math.round(voicePreview.duration)}s` : ""}
+              {voicePreview.duration ? ((Math.round(voicePreview.duration)) + "s") : ""}
             </span>
             <Button type="button" variant="ghost" size="icon" className="size-7 shrink-0 text-danger hover:bg-danger/10 p-0" onClick={clearVoicePreview} aria-label="Delete voice note">
               <Trash2 className="size-3.5" />
@@ -591,7 +581,6 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Media Preview - More Compact */}
       {mediaPreview && (
         <div className="border-t border-border/20 bg-[#fff8fa] px-2 py-2">
           <div className="relative overflow-hidden rounded-xl border border-primary/20 bg-white p-2 shadow-sm">
@@ -629,13 +618,12 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Sticker Tray */}
       {stickerTrayOpen && (
         <div className="border-t border-border/20 bg-[#fff8fa] px-4 py-3">
           <div className="mb-3 flex items-center justify-between">
             <div>
               <p className="text-sm font-semibold text-fg">Stickers</p>
-              <p className="text-[11px] text-subtle">Tap to send \u00b7 save favorites for quick access</p>
+              <p className="text-[11px] text-subtle">Tap to send · save favorites for quick access</p>
             </div>
             <Button type="button" size="sm" variant="outline" className="border-primary text-primary hover:bg-primary/5" onClick={() => gifRef.current?.click()}>
               Import
@@ -646,21 +634,21 @@ export function ChatView() {
               Flink
             </Button>
             <Button type="button" size="sm" variant={stickerTab === "saved" ? "default" : "ghost"} className="rounded-full" onClick={() => setStickerTab("saved")}>
-              Imported {stickers.length ? `(${stickers.length})` : ""}
+              Imported {stickers.length ? ("(" + (stickers.length) + ")") : ""}
             </Button>
             <Button type="button" size="sm" variant={stickerTab === "favorites" ? "default" : "ghost"} className="rounded-full" onClick={() => setStickerTab("favorites")}>
-              Favorites {favoriteStickers.length ? `(${favoriteStickers.length})` : ""}
+              Favorites {favoriteStickers.length ? ("(" + (favoriteStickers.length) + ")") : ""}
             </Button>
           </div>
           <div className="grid max-h-72 grid-cols-5 gap-2 overflow-y-auto pr-1 sm:grid-cols-6">
             {(stickerTab === "flink" ? flinkStarterStickers : stickerTab === "favorites" ? favoriteStickers : stickers).map((sticker, index) => (
-              <div key={`\( {sticker.slice(0, 20)}- \){index}`} className="relative aspect-square rounded-2xl border border-border/20 bg-mist/50 p-1.5 hover:border-primary/30 transition-colors">
+              <div key={((sticker.slice(0, 20)) + "-" + (index))} className="relative aspect-square rounded-2xl border border-border/20 bg-mist/50 p-1.5 hover:border-primary/30 transition-colors">
                 <button type="button" className="size-full" onClick={() => void sendSavedSticker(sticker)}>
                   <img src={sticker} alt="Sticker" className="size-full object-contain" />
                 </button>
                 {stickerTab !== "favorites" && (
                   <button type="button" className="absolute -right-1 -top-1 flex size-5 items-center justify-center rounded-full bg-primary text-[10px] text-white shadow-md" onClick={() => void favoriteSticker(sticker)} aria-label="Save sticker to favorites">
-                    \u2605
+                    ★
                   </button>
                 )}
               </div>
@@ -669,7 +657,6 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Reply Preview - More Compact */}
       {replyingTo && (
         <div className="flex items-center gap-2 border-t border-border/20 bg-primary/5 px-2 py-2 text-[11px]">
           <Reply className="size-3.5 text-primary shrink-0" />
@@ -682,7 +669,6 @@ export function ChatView() {
         </div>
       )}
 
-      {/* Compact Input Area - WhatsApp Style */}
       <form
         className="flex items-end gap-2 border-t border-border/20 bg-[#fff8fa] px-2 py-2"
         onSubmit={(e) => {
@@ -694,7 +680,6 @@ export function ChatView() {
           }
         }}
       >
-        {/* Hidden File Inputs */}
         <input ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp,image/gif,image/avif" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "image"); e.target.value = ""; }} />
         <input ref={voiceRef} type="file" accept="audio/*" capture className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareVoice(f); e.target.value = ""; }} />
         <input ref={videoRef} type="file" accept="video/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) prepareMedia(f, "video"); e.target.value = ""; }} />
@@ -702,37 +687,31 @@ export function ChatView() {
         <input ref={gifRef} type="file" accept="*/*" multiple className="hidden" onChange={(e) => { void importStickers(e.target.files || undefined); e.target.value = ""; }} />
         <input ref={fileUploadRef} type="file" accept="*/*" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) void sendFile(f); e.target.value = ""; }} />
 
-        {/* Left Side: Emoji + Sticker Buttons */}
         <div className="flex gap-0.5">
-          {/* Emoji Button */}
           <div className="relative">
             <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setEmojiComposerOpen((open) => !open)} aria-label="Add emoji">
               <Smile className="size-5" />
             </Button>
-            {/* Emoji Composer */}
             {emojiComposerOpen && (
               <div className="absolute bottom-12 left-0 z-20 grid w-64 grid-cols-8 gap-0.5 rounded-xl border border-border bg-surface p-2 shadow-xl">
                 {"😀,😂,😍,🥰,😎,😢,😡,👍,👎,👏,🤟,💪,🎉,❤️,💔,🚀,💬,🦍,✅,❌,🏆,🤣".split(",").map((emoji) => (
-                  <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => `\( {value} \){emoji}`); setEmojiComposerOpen(false); }}>
+                  <button key={emoji} type="button" className="rounded-lg p-1 text-lg hover:bg-mist transition-colors" onClick={() => { setDraft((value) => ((value) + (emoji))); setEmojiComposerOpen(false); }}>
                     {emoji}
                   </button>
                 ))}
               </div>
             )}
           </div>
-
-          {/* Sticker Button */}
           <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setStickerTrayOpen((open) => !open)} aria-label="Stickers">
             <ImageIcon className="size-5" />
           </Button>
         </div>
 
-        {/* Compact Text Input */}
         <textarea
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           rows={1}
-          placeholder={recordingVoice ? `Recording... ${recordingSeconds}s` : "Message..."}
+          placeholder={recordingVoice ? ("Recording... " + (recordingSeconds) + "s") : "Message..."}
           className="max-h-32 min-h-9 flex-1 resize-none rounded-[20px] border-0 bg-white px-4 py-2.5 text-[14px] text-fg outline-none placeholder:text-muted focus:ring-0 transition-colors"
           onKeyDown={(e) => {
             if (e.key === "Enter" && !e.shiftKey) {
@@ -746,14 +725,11 @@ export function ChatView() {
           }}
         />
 
-        {/* Right Side: Attach + Voice/Send Buttons */}
         <div className="flex gap-0.5">
-          {/* Attach/Pin Button */}
           <div className="relative">
             <Button type="button" variant="ghost" size="icon" className="size-9 hover:bg-primary/10 text-primary" onClick={() => setFileMenuOpen((open) => !open)} aria-label="Attach">
               <Paperclip className="size-5" />
             </Button>
-            {/* Attach Menu - Video, Audio, File */}
             {fileMenuOpen && (
               <div className="absolute bottom-12 right-0 z-20 min-w-[140px] rounded-xl border border-border bg-surface p-1 shadow-xl">
                 <button type="button" className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[13px] hover:bg-mist" onClick={() => { videoRef.current?.click(); setFileMenuOpen(false); }}>
@@ -771,25 +747,22 @@ export function ChatView() {
               </div>
             )}
           </div>
-
-          {/* Voice Record / Send Button */}
           {!draft.trim() && (
             <Button
               type="button"
               variant="ghost"
               size="icon"
-              className={`size-9 rounded-full transition-colors ${
+              className={("size-9 rounded-full transition-colors " + (
                 recordingVoice
                   ? "bg-danger hover:bg-danger/90 text-white"
                   : "text-primary hover:bg-primary/10"
-              }`}
+              ))}
               onClick={() => void toggleVoiceRecording()}
               aria-label={recordingVoice ? "Stop recording" : "Record voice note"}
             >
               {recordingVoice ? <Pause className="size-4" /> : <Mic className="size-4" />}
             </Button>
           )}
-
           {draft.trim() && (
             <Button type="submit" size="icon" className="size-9 rounded-full bg-primary hover:bg-primary/90 text-white transition-colors" aria-label="Send message">
               <Send className="size-4" />
@@ -798,7 +771,6 @@ export function ChatView() {
         </div>
       </form>
 
-      {/* Message Actions Menu (Reactions) - More Compact */}
       {emojiPickerOpen && selectedMessageId && (
         <div className="fixed bottom-20 left-1/2 z-50 -translate-x-1/2 rounded-xl border border-border bg-surface p-3 shadow-xl">
           <p className="mb-2 text-[12px] font-medium text-center">Add Reaction</p>
@@ -827,17 +799,17 @@ function renderLinkedText(value?: string) {
   if (!value) return null;
   const parts = value.split(/(https?:\/\/[^\s]+)/g);
   return parts.map((part, index) => {
-    if (!/^https?:\/\//.test(part)) return <span key={`\( {part}- \){index}`}>{part}</span>;
+    if (!/^https?:\/\//.test(part)) return <span key={((part) + "-" + (index))}>{part}</span>;
     try {
       const url = new URL(part);
       if (url.hostname.includes("flink") || url.hash.startsWith("#room/")) {
-        return <a key={`\( {part}- \){index}`} href={part} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-1.5 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors text-[13px]">
+        return <a key={((part) + "-" + (index))} href={part} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-lg border border-primary/15 bg-primary/5 px-3 py-1.5 text-primary no-underline shadow-sm hover:bg-primary/10 transition-colors text-[13px]">
           <span className="text-xs">🔗</span>
           <span className="min-w-0 truncate max-w-[200px]">{url.hash.startsWith("#room/") ? "Join Flink Room" : part}</span>
         </a>;
       }
     } catch { /* keep raw URL */ }
-    return <a key={`\( {part}- \){index}`} href={part} target="_blank" rel="noreferrer" className="text-primary underline hover:no-underline text-[13px]">
+    return <a key={((part) + "-" + (index))} href={part} target="_blank" rel="noreferrer" className="text-primary underline hover:no-underline text-[13px]">
       {part}
     </a>;
   });
@@ -870,4 +842,4 @@ function compressSticker(file: File) {
     image.onerror = () => { URL.revokeObjectURL(sourceUrl); reject(new Error("Could not read sticker")); };
     image.src = sourceUrl;
   });
-    }
+                                                                                                                                                                                                                                                                                      }
