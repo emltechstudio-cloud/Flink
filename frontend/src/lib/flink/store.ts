@@ -38,6 +38,26 @@ function ensureAudioContext() {
   }
 }
 
+const MAX_VOICE_SECONDS = 10 * 60;
+
+function readAudioDuration(file: File) {
+  return new Promise<number | null>((resolve) => {
+    const url = URL.createObjectURL(file);
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      const duration = Number.isFinite(audio.duration) ? audio.duration : null;
+      URL.revokeObjectURL(url);
+      resolve(duration);
+    };
+    audio.onerror = () => {
+      URL.revokeObjectURL(url);
+      resolve(null);
+    };
+    audio.src = url;
+  });
+}
+
 type FlinkState = {
   boot: "loading" | "auth" | "ready";
   view: AppView;
@@ -729,6 +749,15 @@ export const useFlink = create<FlinkState>((set, get) => ({
       toast.error("Keep voice notes under 20 MB");
       return;
     }
+    const duration = await readAudioDuration(file);
+    if (duration === null) {
+      toast.error("This audio format cannot be played in this browser");
+      return;
+    }
+    if (duration > MAX_VOICE_SECONDS) {
+      toast.error("Voice notes can be up to 10 minutes");
+      return;
+    }
     const thread = get().activeThread;
     const profile = get().profile;
     if (!thread || !profile) return;
@@ -743,7 +772,7 @@ export const useFlink = create<FlinkState>((set, get) => ({
       ts: Date.now(),
       mine: true,
       status: "sent" as const,
-      duration: Math.round(file.size / 1000),
+      duration: Math.round(duration),
       replyTo: replyTo ? { id: replyTo.id, from: replyTo.from, preview: replyTo.text || replyTo.caption || replyTo.fileName || replyTo.kind } : undefined,
     };
     await flinkStorage.putMessage(msg);

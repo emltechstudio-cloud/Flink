@@ -1,4 +1,4 @@
-const CACHE = "flink-static-v5";
+const CACHE = "flink-static-v6";
 const SHELL = ["./", "./index.html", "./manifest.json", "./icon.svg", "./icon-192.png", "./icon-512.png", "./apple-touch-icon.png"];
 const scopeUrl = new URL(self.registration.scope);
 const shellUrls = SHELL.map((path) => new URL(path, scopeUrl).toString());

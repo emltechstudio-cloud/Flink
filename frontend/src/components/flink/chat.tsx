@@ -9,6 +9,10 @@ import { flinkStorage } from "@/lib/flink/storage";
 
 type VoicePreview = { file: File; url: string; duration: number };
 type MediaPreview = { file: File; url: string; kind: "image" | "video" };
+const MAX_VOICE_SECONDS = 10 * 60;
+const MAX_VOICE_BYTES = 20_000_000;
+const MAX_STICKER_BYTES = 2_000_000;
+const MAX_STICKER_DIMENSION = 256;
 const waveform = [4, 8, 13, 9, 16, 11, 19, 12, 7, 15, 10, 18, 8, 14, 6, 11, 17, 9, 13, 5, 10, 15, 8, 12];
 const flinkStarterStickers = ["✦", "♥", "★", "☺", "☀", "⚡", "✓", "→"].map((mark, index) => `data:image/svg+xml,${encodeURIComponent(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><rect width="128" height="128" rx="28" fill="${["#7b1535", "#c44f58", "#b77b18", "#1b8064", "#175c8c", "#6040a0", "#343434", "#9a1b44"][index]}"/><text x="64" y="82" text-anchor="middle" font-size="68" fill="white">${mark}</text></svg>`)}`);
 
@@ -64,7 +68,12 @@ export function ChatView() {
   }, []);
   useEffect(() => {
     if (!recordingVoice) return;
-    const timer = window.setInterval(() => setRecordingSeconds((seconds) => seconds + 1), 1000);
+    const timer = window.setInterval(() => {
+      setRecordingSeconds((seconds) => {
+        if (seconds + 1 >= MAX_VOICE_SECONDS) window.setTimeout(stopVoiceRecording, 0);
+        return Math.min(seconds + 1, MAX_VOICE_SECONDS);
+      });
+    }, 1000);
     return () => window.clearInterval(timer);
   }, [recordingVoice]);
   useEffect(() => {
@@ -118,14 +127,30 @@ export function ChatView() {
   }
 
   function prepareVoice(file: File) {
-    if (file.size > 5_000_000) {
-      setRecordingError("Keep voice notes under 5 MB.");
+    if (file.size > MAX_VOICE_BYTES) {
+      setRecordingError("Keep voice notes under 20 MB.");
       return;
     }
     const url = URL.createObjectURL(file);
     previewUrlsRef.current.add(url);
-    setVoicePreview({ file, url, duration: 0 });
-    setPreviewPlaying(false);
+    const audio = document.createElement("audio");
+    audio.preload = "metadata";
+    audio.onloadedmetadata = () => {
+      if (Number.isFinite(audio.duration) && audio.duration > MAX_VOICE_SECONDS) {
+        URL.revokeObjectURL(url);
+        previewUrlsRef.current.delete(url);
+        setRecordingError("Voice notes can be up to 10 minutes.");
+        return;
+      }
+      setVoicePreview({ file, url, duration: Number.isFinite(audio.duration) ? audio.duration : 0 });
+      setPreviewPlaying(false);
+    };
+    audio.onerror = () => {
+      setRecordingError("This audio format cannot be played in this browser.");
+      URL.revokeObjectURL(url);
+      previewUrlsRef.current.delete(url);
+    };
+    audio.src = url;
   }
 
   function stopVoiceRecording() {
@@ -163,9 +188,15 @@ export function ChatView() {
       voiceStreamRef.current = stream;
       recordingFinalizedRef.current = false;
       recordingStoppingRef.current = false;
-      const preferredMime = "audio/webm;codecs=opus";
-      const mimeType = typeof MediaRecorder.isTypeSupported === "function" && MediaRecorder.isTypeSupported(preferredMime)
-        ? preferredMime
+      const mimeCandidates = [
+        "audio/mp4;codecs=mp4a.40.2",
+        "audio/mp4",
+        "audio/webm;codecs=opus",
+        "audio/webm",
+        "audio/ogg;codecs=opus",
+      ];
+      const mimeType = typeof MediaRecorder.isTypeSupported === "function"
+        ? mimeCandidates.find((candidate) => MediaRecorder.isTypeSupported(candidate))
         : undefined;
       const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
       voiceChunksRef.current = [];
@@ -182,7 +213,11 @@ export function ChatView() {
           voiceRecorderRef.current = null;
           recordingStoppingRef.current = false;
           setRecordingVoice(false);
-          if (blob.size > 0) prepareVoice(new File([blob], `voice-${Date.now()}.webm`, { type: blob.type || "audio/webm" }));
+          if (blob.size > 0) {
+            const type = blob.type || "audio/webm";
+            const extension = type.includes("mp4") ? "m4a" : type.includes("ogg") ? "ogg" : "webm";
+            prepareVoice(new File([blob], `voice-${Date.now()}.${extension}`, { type }));
+          }
           else setRecordingError("No audio was captured. Please try recording again.");
         } catch {
           voiceStreamRef.current = null;
@@ -235,13 +270,13 @@ export function ChatView() {
     const selected = Array.from(files || []);
     const valid = selected.filter((file) => {
       const extension = file.name.toLowerCase().split(".").pop();
-      return file.size <= 20_000_000 && (/^image\/(webp|gif|png)$/.test(file.type) || ["webp", "gif", "png"].includes(extension || ""));
+      return file.size <= MAX_STICKER_BYTES && (/^image\/(webp|gif|png)$/.test(file.type) || ["webp", "gif", "png"].includes(extension || ""));
     }).slice(0, 200);
     if (valid.length === 0) {
       setRecordingError("Choose WebP, GIF, or PNG sticker files.");
       return;
     }
-    const imported = await Promise.all(valid.map(fileToDataUrl));
+    const imported = await Promise.all(valid.map(compressSticker));
     const next = [...imported, ...stickers.filter((item) => !imported.includes(item))].slice(0, 200);
     setStickers(next);
     await flinkStorage.setSetting("stickers", next);
@@ -251,7 +286,9 @@ export function ChatView() {
   async function sendSavedSticker(dataUrl: string) {
     const response = await fetch(dataUrl);
     const blob = await response.blob();
-    await sendGif(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type }), replyingTo ?? undefined);
+    const compressed = await compressSticker(new File([blob], `sticker-${Date.now()}.webp`, { type: blob.type || "image/webp" }));
+    const compressedBlob = await (await fetch(compressed)).blob();
+    await sendGif(new File([compressedBlob], `sticker-${Date.now()}.webp`, { type: "image/webp" }), replyingTo ?? undefined);
     setReplyingTo(null);
   }
 
@@ -300,9 +337,9 @@ export function ChatView() {
           <div className={`relative ${m.kind === "voice" ? "w-[min(94%,360px)]" : "max-w-[86%]"} rounded-[9px] px-3 py-2 text-[15px] leading-snug shadow-[0_1px_1px_rgba(0,0,0,0.12)] ${m.mine ? "rounded-br-[2px] bg-[#f2d9e2] text-fg" : "rounded-bl-[2px] bg-white text-fg"}`} onContextMenu={(e) => { e.preventDefault(); setSelectedMessageId(m.id); setEmojiPickerOpen(true); }}>
             {m.replyTo && <div className="mb-2 rounded-lg border-l-2 border-primary bg-primary/5 px-2 py-1 text-xs text-muted"><span className="font-semibold">Replying to {m.replyTo.from}</span><p className="truncate">{m.replyTo.preview}</p></div>}
             {m.kind === "image" && m.imageUrl && <img src={m.imageUrl} alt="Photo message" className="mb-1 max-h-64 w-full rounded-[7px] object-cover" />}
-            {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls className="mb-1 min-w-0 w-full accent-primary" />}
+            {m.kind === "voice" && m.audioUrl && <audio src={m.audioUrl} controls preload="metadata" className="mb-1 min-w-0 w-full accent-primary" onError={(event) => { event.currentTarget.parentElement?.classList.add("media-load-error"); }} />}
             {m.kind === "video" && m.videoUrl && <video src={m.videoUrl} controls className="mb-1 max-h-64 w-full rounded-[7px]" />}
-            {m.kind === "gif" && m.imageUrl && <><img src={m.imageUrl} alt="Sticker" className="mb-1 max-h-64 rounded-[7px]" /><button type="button" className="mb-1 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>★ Save sticker</button></>}
+            {m.kind === "gif" && m.imageUrl && <><img src={m.imageUrl} alt="Sticker" className="mb-1 max-h-40 max-w-40 rounded-[7px] object-contain" /><button type="button" className="mb-1 text-[11px] font-semibold text-primary hover:underline" onClick={() => void favoriteSticker(m.imageUrl!)}>★ Save sticker</button></>}
             {m.kind === "file" && m.fileUrl && <a href={m.fileUrl} download={m.fileName || "file"} className="mb-1 flex items-center gap-2 rounded-lg bg-primary/10 p-2 text-sm text-primary"><FileText className="size-5 shrink-0" /><span className="max-w-[180px] truncate">{m.fileName || "File"}</span></a>}
             {(m.kind === "text" || m.caption) && <p className={m.kind === "text" ? "" : "mt-1 whitespace-pre-wrap"}>{renderLinkedText(m.kind === "text" ? m.text : m.caption)}</p>}
             {m.reactions && Object.keys(m.reactions).length > 0 && <div className="mt-2 flex flex-wrap gap-1">{Object.entries(m.reactions).map(([emoji, reaction]) => <span key={emoji} className="flex items-center gap-1 rounded-full bg-primary/10 px-2 py-1 text-xs"><span>{emoji}</span><span className="text-subtle">{reaction.count}</span></span>)}</div>}
@@ -357,5 +394,26 @@ function fileToDataUrl(file: File) {
     reader.onload = () => resolve(String(reader.result));
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(file);
+  });
+}
+
+
+function compressSticker(file: File) {
+  return new Promise<string>((resolve, reject) => {
+    const sourceUrl = URL.createObjectURL(file);
+    const image = new Image();
+    image.onload = () => {
+      const width = image.naturalWidth || MAX_STICKER_DIMENSION;
+      const height = image.naturalHeight || MAX_STICKER_DIMENSION;
+      const scale = Math.min(1, MAX_STICKER_DIMENSION / Math.max(width, height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.max(1, Math.round(width * scale));
+      canvas.height = Math.max(1, Math.round(height * scale));
+      canvas.getContext("2d")?.drawImage(image, 0, 0, canvas.width, canvas.height);
+      URL.revokeObjectURL(sourceUrl);
+      resolve(canvas.toDataURL("image/webp", 0.72));
+    };
+    image.onerror = () => { URL.revokeObjectURL(sourceUrl); reject(new Error("Could not read sticker")); };
+    image.src = sourceUrl;
   });
 }
